@@ -1,5 +1,7 @@
 #include "col.hpp"
 
+Col::Col(Graph &graph) : graph(graph){};
+
 void Col::set_color(const Vertex v, const Color k) {
   if (coloring.contains(v))
     classes[coloring[v]].erase(v);
@@ -39,7 +41,7 @@ bool Col::check_coloring() const {
     auto u = source(e, graph);
     auto v = target(e, graph);
     if (coloring.contains(u) && coloring.contains(v) &&
-        coloring[u] != coloring[v])
+        coloring.at(u) != coloring.at(v))
       return false;
   }
 

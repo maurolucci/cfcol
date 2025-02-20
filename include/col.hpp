@@ -3,6 +3,7 @@
 
 #include "graph.hpp"
 
+#include <map>
 #include <vector>
 
 using Color = int;
@@ -13,6 +14,8 @@ using ColorClass = std::map<Color, VertexSet>;
 class Col {
 
 public:
+  Col(Graph &graph);
+
   [[nodiscard]] inline const Coloring &get_coloring() const {
     return coloring;
   };
@@ -24,7 +27,7 @@ public:
   [[nodiscard]] bool check_coloring() const;
 
 private:
-  Graph &graph;
+  const Graph &graph;
   Coloring coloring;
   ColorClass classes;
 };

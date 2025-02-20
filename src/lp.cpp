@@ -6,64 +6,39 @@
 
 LP::LP(const Graph &graph) : LP(Graph{graph}){};
 
-LP::LP(const Graph &&graph) : graph(graph), mapA(), mapB(){};
+LP::LP(const Graph &&graph) : graph(graph), col(this->graph) {
 
-// LP::LP(const HyperGraph &hg, const ConflictGraph &cg, double start_t)
-//     : hg(hg), cg(cg), ecount(static_cast<int>(num_edges(cg))), elist(NULL),
-//       nrows(hg.nbHyperedges() + hg.nbVertices()), start_t(start_t),
-//       Xenv(IloEnv()), Xmodel(Xenv), Xvars(Xenv), Xrestr(Xenv),
-//       Xobj(Xenv) /*, vars(Xenv)*/ {
-//   vcount = num_vertices(cg);
-//   vlist = new CGVertex[vcount];
-//   size_t index = 0;
-//   for (auto v : boost::make_iterator_range(vertices(cg)))
-//     vlist[index++] = v;
-//   index = 0;
-//   elist = new int[2 * ecount];
-//   auto [it, end] = edges(cg);
-//   for (; it != end; ++it) {
-//     elist[index++] = source(*it, cg);
-//     elist[index++] = target(*it, cg);
-//   }
-// };
-
-// LP::LP(const HyperGraph &hg, const ConflictGraph &cg, int vcount,
-//        CGVertex *vlist, int ecount, int *elist, double start_t)
-//     : hg(hg), cg(cg), ecount(ecount), elist(elist),
-//       nrows(hg.nbHyperedges() + hg.nbVertices()), vcount(vcount),
-//       vlist(vlist), start_t(start_t), Xenv(IloEnv()), Xmodel(Xenv),
-//       Xvars(Xenv), Xrestr(Xenv), Xobj(Xenv) /*, vars(Xenv)*/ {};
-
-// LP::~LP() {
-//   // vars.end();
-//   Xrestr.end();
-//   Xvars.end();
-//   Xobj.end();
-//   Xmodel.end();
-//   Xenv.end();
-//   if (vlist != NULL)
-//     delete[] vlist;
-//   delete[] elist;
-// }
+  // Fill maps
+  size_t iA = 0, iB = 0; // Constraint indices
+  isGCP = true;
+  for (auto v : boost::make_iterator_range(vertices(graph))) {
+    auto [a, b] = graph[v];
+    bool retA = tyA2Col.insert({a, iA}).second;
+    bool retB = tyB2Col.insert({b, iB}).second;
+    if (retA) {
+      iA++;
+      snd[a] = std::unordered_set<TypeB>{b};
+    } else {
+      snd[a].insert(b);
+      isGCP = false;
+    }
+    if (retB) {
+      col2TyB.push_back(b);
+      iB++;
+      fst[b] = std::unordered_set<TypeA>{a};
+    } else
+      fst[b].insert(a);
+  }
+};
 
 void LP::initialize(CplexEnv &cenv) {
 
-  // Fill mapA and mapB
-  size_t iA = 0, iB = 0; // indices
-  for (auto v : boost::make_iterator_range(vertices(graph))) {
-    auto [a, b] = graph[v];
-    if (mapA.insert({a, iA}).second)
-      iA++;
-    if (mapB.insert({b, iB}).second)
-      iB++;
-  }
-
   // Add constraints
   // Add ">= 1" constraints, one for each a \in A
-  while (iA--)
+  for (auto i = tyA2Col.size(); i > 0; --i)
     cenv.Xrestr.add(IloRange(cenv.Xenv, 1.0, IloInfinity));
   // Add "<= 1" constraints, one for each b \in B
-  while (iB--)
+  for (auto i = tyB2Col.size(); i > 0; --i)
     cenv.Xrestr.add(IloRange(cenv.Xenv, -1.0, IloInfinity));
   cenv.Xmodel.add(cenv.Xrestr);
 
@@ -73,33 +48,25 @@ void LP::initialize(CplexEnv &cenv) {
 
   // Add initial columns
   // Color each b \in B with an unique color
-  for (auto &p : mapB) {
-    TypeB b = p.first;
-    std::set<TypeB> cB{b};
-    // Find (*,b) vertices in graph
-    std::set<TypeA> cA;
-    for (auto v : boost::make_iterator_range(vertices(graph))) {
-      auto [a1, b1] = graph[v];
-      if (b1 == b)
-        cA.insert(a1);
-    }
-    add_column(cenv, cA, cB);
+  for (auto &p : fst) {
+    std::unordered_set<TypeB> cB{p.first};
+    add_column(cenv, p.second, cB);
   }
 
   return;
 }
 
-void LP::add_column(CplexEnv &cenv, const std::set<TypeA> &cA,
-                    const std::set<TypeB> &cB) {
+void LP::add_column(CplexEnv &cenv, const std::unordered_set<TypeA> &cA,
+                    const std::unordered_set<TypeB> &cB) {
   IloNumColumn column = cenv.Xobj(1.0);
   std::cout << "Adding column: [";
   for (auto a : cA) {
-    column += cenv.Xrestr[mapA[a]](1.0);
+    column += cenv.Xrestr[tyA2Col[a]](1.0);
     std::cout << " " << a;
   }
   std::cout << " ] [";
   for (auto b : cB) {
-    column += cenv.Xrestr[mapA.size() + mapB[b]](-1.0);
+    column += cenv.Xrestr[tyA2Col.size() + tyB2Col[b]](-1.0);
     std::cout << " " << b;
   }
   std::cout << " ]" << std::endl;
@@ -107,8 +74,8 @@ void LP::add_column(CplexEnv &cenv, const std::set<TypeA> &cA,
 }
 
 void LP::add_column(CplexEnv &cenv, int count, const int *members) {
-  std::set<TypeA> cA;
-  std::set<TypeB> cB;
+  std::unordered_set<TypeA> cA;
+  std::unordered_set<TypeB> cB;
   for (int i = 0; i < count; ++i) {
     auto [a, b] = graph[members[i]];
     cA.insert(a);
@@ -140,10 +107,8 @@ LP_STATE LP::optimize() {
   COLORset *newsets = NULL;
   int nnewsets = 0;
 
-  // TODO: Check
-  // If some hyperedge has no representator -> INFLEASIBLE
-  // If every hyperedge has exactly one representator -> SOLVE COLORING
-  // Otherwise, do the code below
+  if (isGCP)
+    return solve_GCP();
 
   // Initialize cplex environment
   IloCplex cplex(cenv.Xmodel);
@@ -183,17 +148,17 @@ LP_STATE LP::optimize() {
     }
 
     // Recover dual values
-    IloNumArray duals(cenv.Xenv, mapA.size() + mapB.size());
+    IloNumArray duals(cenv.Xenv, tyA2Col.size() + tyB2Col.size());
     cplex.getDuals(duals, cenv.Xrestr);
     std::cout << "duals: ";
-    for (int i = 0; i < mapA.size() + mapB.size(); ++i)
+    for (int i = 0; i < tyA2Col.size() + tyB2Col.size(); ++i)
       std::cout << duals[i] << " ";
     std::cout << std::endl;
     IloNumArray weights(cenv.Xenv, num_vertices(graph));
     size_t i = 0;
     for (auto v : boost::make_iterator_range(vertices(graph))) {
       auto [a, b] = graph[v];
-      weights[i++] = duals[mapA[a]] - duals[mapA.size() + mapB[b]];
+      weights[i++] = duals[tyA2Col[a]] - duals[tyA2Col.size() + tyB2Col[b]];
     }
 
     // Scale weights
@@ -235,20 +200,32 @@ LP_STATE LP::optimize() {
     for (int i = 0; i < cenv.Xvars.getSize(); ++i)
       std::cout << values[i] << " ";
     std::cout << std::endl;
-    IloNum obj_value = cplex.getObjValue();
-    std::cout << "LR value: " << obj_value << std::endl;
+    std::cout << "LR value: " << cplex.getObjValue() << std::endl;
 
-    // Check for integrality
-    bool is_integer = true;
-    for (int i = 0; i < cenv.Xvars.getSize(); ++i)
-      if (values[i] < 1 - EPSILON)
-        is_integer = false;
-
-    if (is_integer) {
-      obj_value = round(obj_value);
-      state = INTEGER;
+    // Integrality check
+    int color = 0;
+    for (int i = 0; i < cenv.Xvars.getSize(); ++i) {
+      if (values[i] < EPSILON)
+        continue;
+      else if (values[i] < 1 - EPSILON) {
+        state = FRACTIONAL;
+        break;
+      } else { // Integer value
+        // Recover stable set
+        for (auto j = tyA2Col.size(); j < cenv.Xrestr.getSize(); ++j) {
+          for (auto it = cenv.Xrestr[j].getLinearIterator(); it.ok(); ++it) {
+            if (cenv.Xvars[i].getId() == it.getVar().getId())
+              col.set_color(col2TyB[j - tyA2Col.size()], color);
+          }
+        }
+        color++;
+      }
     }
-    state = FRACTIONAL;
+
+    if (state == FRACTIONAL) {
+      branchVar
+    } else
+      state = INTEGER;
 
     values.end();
   }
@@ -256,6 +233,57 @@ LP_STATE LP::optimize() {
   free(mwis_pi);
   COLORstable_freeenv(&mwis_env);
   cplex.end();
+  return state;
+}
+
+/* Solve a graph coloring problem instance with exactcolors */
+LP_STATE LP::solve_GCP() {
+  int rval = 0;
+  LP_STATE state;
+
+  COLORproblem colorproblem;
+  COLORparms *parms = &(colorproblem.parms);
+  colordata *cd = &(colorproblem.root_cd);
+  int ncolors = 0;
+
+  // Build GCP graph
+  GCPGraph graphGCP;
+  get_gcp_graph(graph, fst, graphGCP);
+
+  // Get edge list
+  int ecount = 0;
+  int elist[2 * num_edges(graphGCP)];
+  for (auto e : boost::make_iterator_range(edges(graphGCP))) {
+    elist[2 * ecount] = source(e, graphGCP);
+    elist[2 * ecount++ + 1] = target(e, graphGCP);
+  }
+
+  // Initialization
+  COLORset *colorclasses = (COLORset *)NULL;
+  COLORproblem_init_with_graph(&colorproblem, num_vertices(graphGCP), ecount,
+                               elist);
+  cd->id = 0;
+  colorproblem.ncolordata = 1;
+  parms->branching_cpu_limit = TIMELIMIT;
+
+  int COLORproblem_init_with_graph(COLORproblem * problem, int ncount,
+                                   int ecount, const int elist[]);
+
+  // Find exact coloring
+  rval = COLORexact_coloring(&colorproblem, &ncolors, &colorclasses);
+
+  // Optimality check
+  if (cd->lower_bound == cd->upper_bound) {
+    state = INTEGER;
+    // Save solution
+    for (auto i = 0; i < ncolors; ++i)
+      for (auto j = 0; j < colorclasses[i].count; ++j)
+        col.set_color(graphGCP[colorclasses[i].members[j]], i);
+  } else
+    state = TIME_OR_MEM_LIMIT;
+
+  COLORproblem_free(&colorproblem);
+  COLORfree_sets(&colorclasses, &ncolors);
   return state;
 }
 
@@ -314,7 +342,7 @@ void LP::save_solution(Coloring &col) {
         coloring[i] = temp_coloring[cv];
       active_colors.insert(coloring[i]);
     }
-  */
+      */
   return;
 }
 
@@ -334,13 +362,13 @@ void LP::branch(std::vector<LP *> &branches, Vertex v) {
 
   // Get the set of vertices to be removed
   // I.e. every vertex (a,b') with b' != b
-  std::set<Vertex> removed;
+  std::unordered_set<Vertex> removed;
   for (auto v : boost::make_iterator_range(vertices(graph)))
     if (graph[v].first == a && graph[v].second != b)
       removed.insert(v);
 
   // Create a view of the graph without the vertices to be removed
-  using VFilter = boost::is_not_in_subset<std::set<Vertex>>;
+  using VFilter = boost::is_not_in_subset<std::unordered_set<Vertex>>;
   VFilter vFilter(removed);
   using Filter = boost::filtered_graph<Graph, boost::keep_all, VFilter>;
   Filter filtered(graph, boost::keep_all(), vFilter);

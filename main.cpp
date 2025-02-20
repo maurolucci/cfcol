@@ -27,28 +27,17 @@ int main() {
   // 8: (e5,v5), 9: (e5, v1)
 
   /*
-    clear_vertex(1, graph);
-    remove_vertex(1, graph);
-    clear_vertex(2, graph);
-    remove_vertex(2, graph);
-    clear_vertex(3, graph);
-    remove_vertex(3, graph);
-    clear_vertex(4, graph);
-    remove_vertex(4, graph);
-    clear_vertex(5, graph);
-    remove_vertex(5, graph);
+  clear_vertex(1, graph);
+  remove_vertex(1, graph);
+  clear_vertex(2, graph);
+  remove_vertex(2, graph);
+  clear_vertex(3, graph);
+  remove_vertex(3, graph);
+  clear_vertex(4, graph);
+  remove_vertex(4, graph);
+  clear_vertex(5, graph);
+  remove_vertex(5, graph);
   */
-
-  std::cout << num_vertices(graph) << " " << num_edges(graph) << std::endl;
-
-  LP lp(graph);
-  LP_STATE state = lp.optimize();
-  (void)state;
-
-  std::vector<LP *> branches(2, NULL);
-  lp.branch(branches, 5);
-  // delete branches[0];
-  // delete branches[1];
 
   return 0;
 }

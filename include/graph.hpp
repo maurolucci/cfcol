@@ -15,6 +15,12 @@ using HGraph = hglib::UndirectedHypergraph<>;
 using HVertex = hglib::VertexIdType;
 using HEdge = hglib::HyperedgeIdType;
 
-void get_conflict_graph(const HGraph &hg, Graph &graph);
+using GCPGraph =
+    boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, TypeB>;
+
+void get_conflict_graph(const HGraph &src, Graph &dst);
+
+void get_gcp_graph(Graph &src, std::map<TypeB, std::unordered_set<TypeA>> &fst,
+                   GCPGraph &dst);
 
 #endif //_GRAPH_HPP_
