@@ -19,18 +19,16 @@ void get_conflict_graph(const HGraph &hg, Graph &graph) {
   return;
 }
 
-void get_gcp_graph(Graph &src, std::map<TypeB, std::unordered_set<TypeA>> &fst,
-                   GCPGraph &dst) {
+void get_gcp_graph(Graph &src, GCPGraph &dst, std::map<TypeB, size_t> &tyB2idB,
+                   std::vector<TypeB> &idB2TyB) {
   // Add vertices
-  std::map<TypeB, GCPGraph::vertex_descriptor> id;
-  for (auto &p : fst)
-    id[p.first] = add_vertex(p.first, dst);
-
+  for (auto b : idB2TyB)
+    add_vertex(b, dst);
   // Add edges
   for (auto e : boost::make_iterator_range(edges(src))) {
-    auto p1 = src[source(e, src)];
-    auto p2 = src[target(e, src)];
-    if (!edge(id[p1.second], id[p2.second], dst).second)
-      add_edge(id[p1.second], id[p2.second], dst);
+    auto b1 = src[source(e, src)].second;
+    auto b2 = src[target(e, src)].second;
+    if (!edge(tyB2idB[b1], tyB2idB[b2], dst).second)
+      add_edge(tyB2idB[b1], tyB2idB[b2], dst);
   }
 }

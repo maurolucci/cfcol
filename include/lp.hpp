@@ -19,7 +19,13 @@ extern "C" {
 #define N_BRANCHES 2
 #endif
 
-enum LP_STATE { INFEASIBLE, INTEGER, FRACTIONAL, TIME_OR_MEM_LIMIT };
+enum LP_STATE {
+  INTIALIZED,
+  INFEASIBLE,
+  INTEGER,
+  FRACTIONAL,
+  TIME_OR_MEM_LIMIT
+};
 
 // typedef struct Column {
 //   std::set<PSet> elements;
@@ -31,45 +37,66 @@ class LP {
 public:
   LP(const Graph &graph);
   LP(const Graph &&graph);
+  ~LP();
 
   // Optimize the linear relaxation by column generation
   [[nodiscard]] LP_STATE optimize();
 
-  // Save the optimal solution
-  void save_solution(Coloring &coloring);
+  // Get objective value (after calling optimize)
+  [[nodiscard]] double get_obj_value() const { return objVal; };
 
-  // Branch
-  void branch(std::vector<LP *> &branches, Vertex v);
+  // Get number of columns (after calling optimize)
+  [[nodiscard]] size_t get_n_columns() const { return stables.size(); };
+
+  // Save the optimal solution (after calling optimize)
+  void save_solution(Col &col);
+
+  // Branch (after calling optimize)
+  void branch(std::vector<LP *> &branches);
 
 private:
   Graph graph;                     // Input graph with vertices in TypeA x TypeB
-  std::map<TypeA, size_t> tyA2Col; // Map from TypeA to id of Constraint (>= 1)
-  std::map<TypeB, size_t> tyB2Col; // Map from TypeB to id of Constraint (<= 1)
-  std::vector<TypeB> col2TyB;      // Map from id of Constraint (<= 1) to TypeB
-  std::map<TypeA, std::unordered_set<TypeB>> snd; // snd[a] = {b: (a,b) \in V}
-  std::map<TypeB, std::unordered_set<TypeA>> fst; // fst[b] = {a: (a,b) \in V}
-  Vertex branchVar;                               // Branching variable
+  size_t nA, nB;                   // |A| and |B|
+  std::map<TypeA, size_t> tyA2idA; // Map from TypeA to idA
+  std::map<TypeB, size_t> tyB2idB; // Map from TypeB to idB
+  std::vector<TypeA> idA2TyA;      // Map from idA to TypeA
+  std::vector<TypeB> idB2TyB;      // Map from idB to TypeB
+  std::vector<std::vector<int>> snd; // Map from idA to subset of Vertex:
+                                     // snd[i_a] = {(a,b) \in V}
+  std::vector<std::vector<int>> fst; // Map from idB to subset of Vertex:
+                                     // fst[i_b] = {(a,b) \in V}
+  std::vector<COLORset *> stables;   // Vector of columns (stable sets)
+  std::vector<int> posVars;          // Vector of positive variables
+  Vertex branchVar;                  // Branching variable
+  double objVal;                     // Objective value
+
   bool isGCP; // Whether the instance is a graph coloring instance, i.e.
               // |snd[a]| = 1 forall a
-  Col col;    // Coloring enviroment
 
   // Initialize the linear relaxation with an initial set of columns
   void initialize(CplexEnv &cenv);
 
   // Add a new column to the linear relaxation
-  void add_column(CplexEnv &cenv, const std::unordered_set<size_t> &cA,
-                  const std::unordered_set<size_t> &cB);
-  void add_column(CplexEnv &cenv, int count, const int *members);
+  void add_column(CplexEnv &cenv, COLORset *newset);
 
   // Set CPLEX's parameters
   void set_parameters(CplexEnv &cenv, IloCplex &cplex);
 
+  // Compute vertex weights from dual values
+  // Return a boolean to indicate whether the weight of any vertex changed sign
+  // from the previous iteration and the number of positive weights
+  std::pair<bool, size_t> get_weights(std::vector<double> &weights,
+                                      IloNumArray &duals);
+
   // Covert weights from double to int
-  int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
-                      const IloNumArray dbl_nweights);
+  int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef, size_t nPosWeights,
+                      const std::vector<double> &dbl_nweights);
 
   // Exact solve of a GCP instance
   LP_STATE solve_GCP();
+
+  // Get branching variable
+  size_t get_branching_variable(const IloNumArray &values);
 };
 
 #endif // _LP_HPP_

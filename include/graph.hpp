@@ -20,7 +20,7 @@ using GCPGraph =
 
 void get_conflict_graph(const HGraph &src, Graph &dst);
 
-void get_gcp_graph(Graph &src, std::map<TypeB, std::unordered_set<TypeA>> &fst,
-                   GCPGraph &dst);
+void get_gcp_graph(Graph &src, GCPGraph &dst, std::map<TypeB, size_t> &tyB2idB,
+                   std::vector<TypeB> &idB2TyB);
 
 #endif //_GRAPH_HPP_

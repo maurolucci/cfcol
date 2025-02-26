@@ -22,12 +22,12 @@ public:
 
   [[nodiscard]] inline size_t get_n_colors() const { return classes.size(); };
 
-  void set_color(const Vertex v, const Color k);
+  void set_color(const TypeA a, const TypeB b, const Color k);
 
   [[nodiscard]] bool check_coloring() const;
 
 private:
-  const Graph &graph;
+  const Graph graph;
   Coloring coloring;
   ColorClass classes;
 };

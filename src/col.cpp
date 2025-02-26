@@ -2,11 +2,19 @@
 
 Col::Col(Graph &graph) : graph(graph){};
 
-void Col::set_color(const Vertex v, const Color k) {
-  if (coloring.contains(v))
-    classes[coloring[v]].erase(v);
-  coloring[v] = k;
-  classes[k].insert(v);
+void Col::set_color(const TypeA a, const TypeB b, const Color k) {
+  // Find vertex u in the original graph such that graph[u] = (a,b)
+  Vertex u = num_vertices(graph);
+  for (auto v : boost::make_iterator_range(vertices(graph)))
+    if (graph[v].first == a && graph[v].second == b) {
+      u = v;
+      break;
+    }
+  assert(u < num_vertices(graph));
+  if (coloring.contains(u))
+    classes[coloring[u]].erase(u);
+  coloring[u] = k;
+  classes[k].insert(u);
 }
 
 bool Col::check_coloring() const {
@@ -41,7 +49,7 @@ bool Col::check_coloring() const {
     auto u = source(e, graph);
     auto v = target(e, graph);
     if (coloring.contains(u) && coloring.contains(v) &&
-        coloring.at(u) != coloring.at(v))
+        coloring.at(u) == coloring.at(v))
       return false;
   }
 
