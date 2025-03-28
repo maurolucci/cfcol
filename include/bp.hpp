@@ -3,9 +3,11 @@
 
 #include "bp.hpp"
 #include "lp.hpp"
+
 #include <cfloat>
 #include <chrono>
 #include <cmath>
+#include <exception>
 #include <iterator>
 
 #define EPSILON_BP 0.001 // For doing ceil(x - EPSILON_BP) during prunning
@@ -17,6 +19,9 @@
 
 using ClockType = std::chrono::high_resolution_clock;
 using TimePoint = std::chrono::_V2::system_clock::time_point;
+
+class TimelimitEx : public std::exception {};
+class MemlimitEx : public std::exception {};
 
 class Node {
 
@@ -33,6 +38,10 @@ public:
 
   LP_STATE solve() { return lp->optimize(); }
 
+  template <class Solution> void save(Solution &sol) { lp->save_solution(sol); }
+
+  int get_n_columns() { return lp->get_n_columns(); }
+
   void branch(std::vector<Node *> &sons) {
 
     std::vector<LP *> lps;
@@ -45,10 +54,6 @@ public:
     return;
   }
 
-  template <class Solution> void save(Solution &sol) { lp->save_solution(sol); }
-
-  int get_n_columns() { return lp->get_n_columns(); }
-
 private:
   LP *lp;
 };
@@ -57,14 +62,10 @@ template <class Solution> class BP {
 
 public:
   BP(Solution &sol, bool DFS = false, bool EARLY_BRANCHING = false)
-      : best_integer_solution(sol), DFS(DFS), EARLY_BRANCHING(EARLY_BRANCHING) {
+      : best_integer_solution(sol), DFS(DFS), EARLY_BRANCHING(EARLY_BRANCHING),
+        primal_bound(DBL_MAX), nodes(0), root_lower_bound(-1) {}
 
-    primal_bound = DBL_MAX;
-    nodes = 0;
-    root_lower_bound = -1;
-  }
-
-  void solve(Node *root) {
+  Stats solve(Node *root) {
 
     start_t = ClockType::now();
     first_t = start_t;
@@ -72,7 +73,11 @@ public:
 
     try {
       push(root);
-    } catch (...) { // Time or mem expired
+    } catch (TimelimitEx &e) { // Timelimit exception
+      return {
+          0, 0, TIMELIMIT, MAXITIME, 0,
+      };
+
       opt_flag = 0;
       primal_bound = 99999999;
       dual_bound = -99999999;
@@ -244,12 +249,12 @@ private:
 
     switch (state) {
 
-    case INFEASIBLE:
+    case LP_INFEASIBLE:
       // Prune by infeasibility
       delete node;
       return;
 
-    case INTEGER:
+    case LP_INTEGER:
       // Prune by optimality
       obj_value = node->get_obj_value();
       if (obj_value < primal_bound)
@@ -257,7 +262,7 @@ private:
       delete node;
       return;
 
-    case FRACTIONAL:
+    case LP_FRACTIONAL:
       obj_value = node->get_obj_value();
       if (ceil(obj_value - EPSILON_BP) >= primal_bound) {
         // Prune by bound
@@ -266,7 +271,17 @@ private:
       }
       break;
 
-    case TIME_OR_MEM_LIMIT:
+    case LP_TIMELIMIT:
+      delete node;
+      throw TimelimitEx();
+      return;
+
+    case LP_MEMLIMIT:
+      delete node;
+      throw MemlimitEx();
+      return;
+
+    default:
       delete node;
       throw std::exception{};
       return;

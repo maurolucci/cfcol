@@ -6,7 +6,7 @@
 #include <limits>
 #include <numeric>
 
-LP::LP(const Graph &graph) : LP(Graph{graph}){};
+LP::LP(const Graph &graph) : LP(Graph{graph}) {};
 
 LP::LP(const Graph &&graph) : graph(graph), stables(), posVars(), objVal(-1.0) {
 
@@ -36,7 +36,7 @@ LP::LP(const Graph &&graph) : graph(graph), stables(), posVars(), objVal(-1.0) {
 };
 
 LP::~LP() {
-  for (auto i = 0; i < stables.size(); ++i) {
+  for (size_t i = 0; i < stables.size(); ++i) {
     if (stables[i]->age >= 0) {
       free(stables[i]->members);
       free(stables[i]);
@@ -62,7 +62,7 @@ void LP::initialize(CplexEnv &cenv) {
 
   // Add initial columns
   // Color each b \in B with an unique color
-  for (int i = 0; i < nB; ++i) {
+  for (size_t i = 0; i < nB; ++i) {
     COLORset *newset = new COLORset;
     newset->count = fst[i].size();
     newset->age = -1; // Initialize this value to make this column different to
@@ -83,10 +83,10 @@ void LP::add_column(CplexEnv &cenv, COLORset *newset) {
     cB[tyB2idB[b]] = true;
   }
   IloNumColumn column = cenv.Xobj(1.0);
-  for (int i = 0; i < cA.size(); ++i)
+  for (size_t i = 0; i < cA.size(); ++i)
     if (cA[i])
       column += cenv.Xrestr[i](1.0);
-  for (int i = 0; i < cB.size(); ++i)
+  for (size_t i = 0; i < cB.size(); ++i)
     if (cB[i])
       column += cenv.Xrestr[cA.size() + i](-1.0);
   cenv.Xvars.add(IloNumVar(column));
@@ -95,11 +95,11 @@ void LP::add_column(CplexEnv &cenv, COLORset *newset) {
   // *******************************************************************
   // Print some statics
   std::cout << "adding column: [";
-  for (int i = 0; i < cA.size(); ++i)
+  for (size_t i = 0; i < cA.size(); ++i)
     if (cA[i])
       std::cout << " " << idA2TyA[i];
   std::cout << " ] [";
-  for (int i = 0; i < cB.size(); ++i)
+  for (size_t i = 0; i < cB.size(); ++i)
     if (cB[i])
       std::cout << " " << idB2TyB[i];
   std::cout << " ]" << std::endl;
@@ -140,8 +140,7 @@ std::pair<bool, size_t> LP::get_weights(std::vector<double> &weights,
 LP_STATE LP::optimize() {
 
   auto startTime = std::chrono::high_resolution_clock::now();
-  int rval = 0;
-  LP_STATE state = INTIALIZED;
+  LP_STATE state = LP_UNSOLVED;
 
   CplexEnv cenv;
 
@@ -166,7 +165,7 @@ LP_STATE LP::optimize() {
   initialize(cenv);
 
   // Initalize stable environment
-  rval = COLORstable_initenv(&mwis_env, NULL, 0);
+  COLORstable_initenv(&mwis_env, NULL, 0);
 
   // Intialize vectors of weights
   mwis_pi = (COLORNWT *)COLOR_SAFE_MALLOC(num_vertices(graph), COLORNWT);
@@ -196,7 +195,7 @@ LP_STATE LP::optimize() {
     // Set time limit
     double timeLimit = TIMELIMIT - get_elapsed_time(startTime);
     if (timeLimit < 0) {
-      state = TIME_OR_MEM_LIMIT;
+      state = LP_TIMELIMIT;
       break;
     }
     cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
@@ -206,9 +205,12 @@ LP_STATE LP::optimize() {
 
     // Handle errores
     IloCplex::CplexStatus status = cplex.getCplexStatus();
-    if (status == IloCplex::AbortTimeLim || status == IloCplex::MemLimFeas ||
-        status == IloCplex::MemLimInfeas) {
-      state = TIME_OR_MEM_LIMIT;
+    if (status == IloCplex::AbortTimeLim) {
+      state != LP_TIMELIMIT;
+      break;
+    } else if (status == IloCplex::MemLimFeas ||
+               status == IloCplex::MemLimInfeas) {
+      state != LP_MEMLIMIT;
       break;
     }
 
@@ -257,12 +259,12 @@ LP_STATE LP::optimize() {
     // Print some statics
     // Dual values
     std::cout << "dual values: ";
-    for (int i = 0; i < nA + nB; ++i)
+    for (size_t i = 0; i < nA + nB; ++i)
       std::cout << duals[i] << " ";
     std::cout << std::endl;
     // Weights
     std::cout << "weights: ";
-    for (int i = 0; i < weights.size(); ++i)
+    for (size_t i = 0; i < weights.size(); ++i)
       std::cout << weights[i] << " ";
     std::cout << std::endl;
     // Positive weights
@@ -270,7 +272,7 @@ LP_STATE LP::optimize() {
               << num_vertices(graph) << std::endl;
     // Scaled weights
     std::cout << "mwis_pi: ";
-    for (int i = 0; i < nPosWeights; ++i)
+    for (size_t i = 0; i < nPosWeights; ++i)
       std::cout << mwis_pi[i] << " ";
     std::cout << std::endl;
     std::cout << "mwis_pi_scalef: " << mwis_pi_scalef << std::endl;
@@ -284,8 +286,8 @@ LP_STATE LP::optimize() {
     // *******************************************************************
 
     // Solve the MWIS problem
-    rval = COLORstable_wrapper(&mwis_env, &newsets, &nnewsets, nPosWeights,
-                               ecount, elist, mwis_pi, mwis_pi_scalef, 0, 0, 2);
+    COLORstable_wrapper(&mwis_env, &newsets, &nnewsets, nPosWeights, ecount,
+                        elist, mwis_pi, mwis_pi_scalef, 0, 0, 2);
 
     // Add column/s
     for (int set_i = 0; set_i < nnewsets; ++set_i) {
@@ -305,7 +307,7 @@ LP_STATE LP::optimize() {
 
   } while (nnewsets > 0);
 
-  if (state != TIME_OR_MEM_LIMIT) {
+  if (state != LP_TIMELIMIT && state != LP_MEMLIMIT) {
 
     // Recover primal values and objective value
     IloNumArray values = IloNumArray(cenv.Xenv, cenv.Xvars.getSize());
@@ -324,19 +326,19 @@ LP_STATE LP::optimize() {
     // *******************************************************************
 
     // Integrality check
-    state = INTEGER;
+    state = LP_INTEGER;
     for (int i = 0; i < cenv.Xvars.getSize(); ++i) {
       if (values[i] < EPSILON)
         continue;
       else if (values[i] < 1 - EPSILON)
-        state = FRACTIONAL;
+        state = LP_FRACTIONAL;
       posVars.push_back(i);
     }
 
-    if (state == FRACTIONAL) {
+    if (state == LP_FRACTIONAL) {
       // Find branching variable
       branchVar = get_branching_variable(values);
-    } else if (state == INTEGER)
+    } else if (state == LP_INTEGER)
       objVal = posVars.size();
 
     values.end();
@@ -350,7 +352,6 @@ LP_STATE LP::optimize() {
 
 /* Solve a graph coloring problem instance with exactcolors */
 LP_STATE LP::solve_GCP() {
-  int rval = 0;
   LP_STATE state;
 
   COLORproblem colorproblem;
@@ -382,11 +383,11 @@ LP_STATE LP::solve_GCP() {
                                    int ecount, const int elist[]);
 
   // Find exact coloring
-  rval = COLORexact_coloring(&colorproblem, &ncolors, &colorclasses);
+  COLORexact_coloring(&colorproblem, &ncolors, &colorclasses);
 
   // Optimality check
   if (cd->lower_bound == cd->upper_bound) {
-    state = INTEGER;
+    state = LP_INTEGER;
     objVal = ncolors;
     // Save solution
     // Stable sets need to be translated into vertices of the original graph
@@ -413,7 +414,7 @@ LP_STATE LP::solve_GCP() {
       posVars.push_back(i);
     }
   } else
-    state = TIME_OR_MEM_LIMIT;
+    state = LP_TIMELIMIT;
 
   COLORproblem_free(&colorproblem);
   COLORfree_sets(&colorclasses, &ncolors);
@@ -487,7 +488,7 @@ size_t LP::get_branching_variable(const IloNumArray &values) {
   int best_a = -1;
   int best_v = -1;
   double best_value = 0.0;
-  for (int i = 0; i < nA; ++i) {
+  for (size_t i = 0; i < nA; ++i) {
     if (posSnd[i].size() <= 1)
       continue;
     else if (best_a == -1 || posSnd[i].size() < posSnd[best_a].size()) {

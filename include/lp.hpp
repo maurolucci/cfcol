@@ -8,6 +8,7 @@ extern "C" {
 #include "color.h"
 #include "color_private.h"
 #include "mwis.h"
+#include "stats.hpp"
 }
 
 #include <chrono>
@@ -18,14 +19,6 @@ extern "C" {
 #ifndef N_BRANCHES
 #define N_BRANCHES 2
 #endif
-
-enum LP_STATE {
-  INTIALIZED,
-  INFEASIBLE,
-  INTEGER,
-  FRACTIONAL,
-  TIME_OR_MEM_LIMIT
-};
 
 // typedef struct Column {
 //   std::set<PSet> elements;

@@ -1,5 +1,6 @@
 #include "bp.hpp"
 #include "col.hpp"
+#include "compact_ilp.hpp"
 #include "graph.hpp"
 #include "lp.hpp"
 #include <boost/graph/copy.hpp>
@@ -29,6 +30,7 @@ int main() {
   // 4: (e3,v3), 5: (e3,v4), 6: (e4,v4), 7: (e4, v5)
   // 8: (e5,v5), 9: (e5, v1)
 
+  /*
   clear_vertex(1, graph);
   remove_vertex(1, graph);
   clear_vertex(2, graph);
@@ -39,6 +41,7 @@ int main() {
   remove_vertex(4, graph);
   clear_vertex(5, graph);
   remove_vertex(5, graph);
+  */
 
   Graph gcopy;
   boost::copy_graph(graph, gcopy);
@@ -47,6 +50,8 @@ int main() {
   Node *root = new Node(lp);
   BP<Col> bp(col);
   bp.solve(root);
+
+  solve_ilp(gcopy, 3);
 
   return 0;
 }
