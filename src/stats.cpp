@@ -31,7 +31,7 @@ void Stats::print_stats(std::ostream &file) {
   file << "Variables: " << nvars << std::endl;
   file << "Constraints: " << ncons << std::endl;
   file << "State: " << get_state_as_str() << std::endl;
-  file << "Time: " << time << std::endl;
+  file << "Time: " << time << std::endl; // To seconds
   file << "Nodes: " << nodes << std::endl;
   file << "Lower bound: " << lb << std::endl;
   file << "Upper bound: " << ub << std::endl;

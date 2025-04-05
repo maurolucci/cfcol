@@ -52,12 +52,16 @@ struct GraphEnv {
 
 struct StableEnv {
   VertexVector stable;   // stable set
+  std::vector<TypeA> as; // vector of A-values from the stable set, i.e. {a \in
+                         // A: (a,b) \in S for some b \in B}
   std::vector<TypeB> bs; // vector of B-values from the stable set, i.e. {b \in
                          // B: (a,b) \in S for some a \in A}
   double cost;
   StableEnv();
-  StableEnv(VertexVector &stable, std::vector<TypeB> &bs, double cost);
-  StableEnv(VertexVector &&stable, std::vector<TypeB> &&bs, double cost);
+  StableEnv(VertexVector &stable, std::vector<TypeB> &as,
+            std::vector<TypeB> &bs, double cost);
+  StableEnv(VertexVector &&stable, std::vector<TypeB> &&as,
+            std::vector<TypeB> &&bs, double cost);
 };
 
 #endif //_GRAPH_HPP_

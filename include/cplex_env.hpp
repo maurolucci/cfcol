@@ -5,15 +5,18 @@
 #include <ilcplex/ilocplex.h>
 
 struct CplexEnv {
-  IloEnv Xenv;          // CPLEX environment structure
-  IloModel Xmodel;      // CPLEX model
-  IloObjective Xobj;    // CPLEX objective function
-  IloNumVarArray Xvars; // CPLEX variables
-  IloRangeArray Xrestr; // CPLEX constraints
+  IloEnv Xenv;           // CPLEX environment structure
+  IloModel Xmodel;       // CPLEX model
+  IloObjective Xobj;     // CPLEX objective function
+  IloNumVarArray Xvars;  // CPLEX variables
+  IloRangeArray XrestrA; // CPLEX constraints
+  IloRangeArray XrestrB; // CPLEX constraints
   CplexEnv()
-      : Xenv(IloEnv()), Xmodel(Xenv), Xobj(Xenv), Xvars(Xenv), Xrestr(Xenv) {}
+      : Xenv(IloEnv()), Xmodel(Xenv), Xobj(Xenv), Xvars(Xenv), XrestrA(Xenv),
+        XrestrB(Xenv) {}
   ~CplexEnv() {
-    Xrestr.end();
+    XrestrA.end();
+    XrestrB.end();
     Xvars.end();
     Xobj.end();
     Xmodel.end();

@@ -52,12 +52,21 @@ int main() {
 
     // Solve with compact ilp
     std::cout << std::endl;
-    Stats stats2 = solve_ilp(gcopy, 5, std::cout);
+    // Find an upper bound for the number of colors
+    size_t ncolors = 0;
+    for (auto v : boost::make_iterator_range(vertices(gcopy))) {
+      std::set<TypeB> bs;
+      for (auto u : boost::make_iterator_range(adjacent_vertices(v, gcopy)))
+        bs.insert(gcopy[u].second);
+      ncolors = std::max(ncolors, bs.size());
+    }
+    std::cout << "Nro de colores: " << ncolors << std::endl;
+    Stats stats2 = solve_ilp(gcopy, ncolors, std::cout);
     stats2.print_stats(std::cout);
 
     if (stats1.state == OPTIMAL && stats2.state == OPTIMAL) {
-      assert(stats1.ub == stats2.ub);
-      assert(stats1.lb == stats2.lb);
+      assert(round(stats1.ub) == round(stats2.ub));
+      assert(round(stats1.lb) == round(stats2.lb));
     }
   }
 }

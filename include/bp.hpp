@@ -15,7 +15,7 @@
 
 // #define ONLY_RELAXATION
 #ifndef MAXTIME
-#define MAXTIME 3600
+#define MAXTIME 3600 // In seconds = 1 hour
 #endif
 
 using ClockType = std::chrono::high_resolution_clock;
@@ -153,9 +153,8 @@ private:
   std::ostream &log;
 
   Stats return_stats(STATE state) {
-    double elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-                         ClockType::now() - start_t)
-                         .count();
+    double elapsed =
+        std::chrono::duration<double>(ClockType::now() - start_t).count();
     if (elapsed > MAXTIME) {
       elapsed = MAXTIME;
       state = primal_bound == DBL_MAX ? TIME_EXCEEDED : FEASIBLE;
@@ -283,8 +282,7 @@ private:
     if (first_call)
       first_call = false;
     else {
-      if (std::chrono::duration_cast<std::chrono::seconds>(now_t - start_t)
-              .count() < 10.0)
+      if (std::chrono::duration<double>(now_t - start_t).count() < 10.0)
         return;
       first_t = now_t;
     }
@@ -303,9 +301,7 @@ private:
           << "%";
     log << "\t Nodes: processed = " << nodes << ", left = " << L.size()
         << "\t time = "
-        << std::chrono::duration_cast<std::chrono::seconds>(now_t - start_t)
-               .count()
-        << std::endl;
+        << std::chrono::duration<double>(now_t - start_t).count() << std::endl;
   }
 };
 

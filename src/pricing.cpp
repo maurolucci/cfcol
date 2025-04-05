@@ -1,46 +1,101 @@
 #include "pricing.hpp"
 
 #define TIMELIMIT 300.0 // = 5 minutes
+#define THRESHOLD 1.1   // Threshold for early stop
 
-std::tuple<StableEnv, PRICING_STATE> exact_solve(GraphEnv &in,
-                                                 IloNumArray &duals) {
+void ThresholdCallback::check_thresolhd(
+    const IloCplex::Callback::Context &context) {
+  if (context.isCandidatePoint())
+    if (context.getCandidateObjective() > THRESHOLD) {
+      // Save stable set
+      IloNumArray valY(context.getEnv(), num_vertices(in.graph));
+      context.getCandidatePoint(y, valY);
+      IloNumArray valWa(context.getEnv(), in.nA);
+      context.getCandidatePoint(wa, valWa);
+      IloNumArray valWb(context.getEnv(), in.nB);
+      context.getCandidatePoint(wb, valWb);
+      for (auto v : boost::make_iterator_range(vertices(in.graph)))
+        if (valY[v] > 0.5)
+          stab.stable.push_back(v);
+      for (size_t iA = 0; iA < in.nA; ++iA)
+        if (valWa[iA] > 0.5)
+          stab.as.push_back(in.idA2TyA[iA]);
+      for (size_t iB = 0; iB < in.nB; ++iB)
+        if (valWb[iB] > 0.5)
+          stab.bs.push_back(in.idB2TyB[iB]);
+      stab.cost = context.getCandidateObjective();
+      // Abort execution
+      context.abort();
+    }
+}
 
-  // CPLEX enviroment variables
-  IloEnv cxenv;
-  IloModel cxmodel(cxenv);
+// Implementation of the invoke method.
+//
+// This is the method that we have to implement to fulfill the
+// generic callback contract. CPLEX will call this method during
+// the solution process at the places that we asked for.
+void ThresholdCallback::invoke(const IloCplex::Callback::Context &context) {
+  if (context.inCandidate())
+    check_thresolhd(context);
+}
+
+PricingEnv::PricingEnv(GraphEnv &in)
+    : in(in), stab(), cxenv(), cxmodel(cxenv), y(cxenv, num_vertices(in.graph)),
+      wa(cxenv, in.nA), wb(cxenv, in.nB), cxcons(cxenv), cplex(cxenv),
+      cb(in, stab, y, wa, wb), contextMask(0) {
+  exact_init();
+}
+
+PricingEnv::~PricingEnv() {
+  // End CPLEX variables
+  cplex.end();
+  cxcons.end();
+  y.end();
+  wa.end();
+  wb.end();
+  cxobj.end();
+  cxmodel.end();
+  cxenv.end();
+}
+
+void PricingEnv::exact_init() {
 
   // Variables
-  IloNumVarArray y(cxenv, num_vertices(in.graph));
-  IloNumVarArray w(cxenv, in.nB);
   for (auto v : boost::make_iterator_range(vertices(in.graph))) {
     char name[100];
     snprintf(name, sizeof(name), "y_%ld_%ld", in.graph[v].first,
              in.graph[v].second);
     y[v] = IloBoolVar(cxenv, name);
   }
-  for (size_t ib = 0; ib < in.nB; ++ib) {
+  for (size_t iA = 0; iA < in.nA; ++iA) {
     char name[100];
-    snprintf(name, sizeof(name), "w_%ld", ib);
-    w[ib] = IloBoolVar(cxenv, name);
+    snprintf(name, sizeof(name), "wa_%ld", iA);
+    wa[iA] = IloBoolVar(cxenv, name);
+  }
+  for (size_t iB = 0; iB < in.nB; ++iB) {
+    char name[100];
+    snprintf(name, sizeof(name), "wb_%ld", iB);
+    wb[iB] = IloBoolVar(cxenv, name);
   }
 
   // Objective
-  IloExpr fobj(cxenv, 0);
-  for (auto v : boost::make_iterator_range(vertices(in.graph)))
-    fobj += y[v] * duals[in.tyA2idA[in.graph[v].first]];
+  IloExpr obj(cxenv);
+  for (size_t iA = 0; iA < in.nA; ++iA)
+    obj += wa[iA] * 1.0;
   for (size_t iB = 0; iB < in.nB; ++iB)
-    fobj -= w[iB] * duals[in.nA + iB];
-  cxmodel.add(IloMaximize(cxenv, fobj));
+    obj += wb[iB] * (-1.0);
+  cxobj = IloMaximize(cxenv, obj);
+  cxmodel.add(cxobj);
+  obj.end();
 
   // Constraints
-  IloConstraintArray cxcons(cxenv);
-
   // (1) \sum_{b \in B: (a,b) \in V} y_a_b <= 1, for all a \in A
   for (size_t ia = 0; ia < in.nA; ++ia) {
     IloExpr restr(cxenv);
     for (size_t v : in.snd[ia])
       restr += y[v];
     cxcons.add(restr <= 1);
+    restr.end();
   }
 
   // (2) y_a_b + y_a'_b' <= 1, for all ((a,b),(a',b')) \in E such that a != a'
@@ -52,19 +107,45 @@ std::tuple<StableEnv, PRICING_STATE> exact_solve(GraphEnv &in,
     IloExpr restr(cxenv);
     restr += y[u] + y[v];
     cxcons.add(restr <= 1);
+    restr.end();
   }
 
-  // (3) y_a_b <= w_b, for all (a,b) \in V
+  // (3a) y_a_b <= wa_a, for all (a,b) \in V
   for (auto v : boost::make_iterator_range(vertices(in.graph))) {
     IloExpr restr(cxenv);
-    restr += y[v] - w[in.tyB2idB[in.graph[v].second]];
+    restr += y[v] - wa[in.tyA2idA[in.graph[v].first]];
     cxcons.add(restr <= 0);
+    restr.end();
+  }
+  for (size_t iA = 0; iA < in.nA; ++iA) {
+    IloExpr restr(cxenv);
+    restr += wa[iA];
+    for (auto v : in.snd[iA])
+      restr -= y[v];
+    cxcons.add(restr <= 0);
+    restr.end();
+  }
+
+  // (3b) y_a_b <= wb_b, for all (a,b) \in V
+  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
+    IloExpr restr(cxenv);
+    restr += y[v] - wb[in.tyB2idB[in.graph[v].second]];
+    cxcons.add(restr <= 0);
+    restr.end();
+  }
+  for (size_t iB = 0; iB < in.nB; ++iB) {
+    IloExpr restr(cxenv);
+    restr += wb[iB];
+    for (auto v : in.fst[iB])
+      restr -= y[v];
+    cxcons.add(restr <= 0);
+    restr.end();
   }
 
   cxmodel.add(cxcons);
 
-  // CPLEX
-  IloCplex cplex(cxmodel);
+  // Re-export model
+  cplex.extract(cxmodel);
 
   // Set parameters
   cplex.setDefaults();
@@ -74,7 +155,30 @@ std::tuple<StableEnv, PRICING_STATE> exact_solve(GraphEnv &in,
   cplex.setOut(cxenv.getNullStream());
   cplex.setWarning(cxenv.getNullStream());
 
+  // Now we get to setting up the generic callback.
+  // We instantiate a ThresholdCallback and set the contextMask parameter.
+  contextMask |= IloCplex::Callback::Context::Id::Candidate;
+
+  // If contextMask is not zero we add the callback.
+  if (contextMask != 0)
+    cplex.use(&cb, contextMask);
+}
+
+std::tuple<StableEnv, PRICING_STATE>
+PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+
+  // Update objective coefficients
+  cxobj.setLinearCoefs(wa, dualsA);
+  cxobj.setLinearCoefs(wb, dualsB);
+  cxmodel.add(cxobj);
+
+  // Reset stable
+  stab.stable.clear();
+  stab.as.clear();
+  stab.bs.clear();
+
   // Solve
+  cplex.extract(cxmodel);
   cplex.solve();
 
   // Get final state
@@ -82,6 +186,9 @@ std::tuple<StableEnv, PRICING_STATE> exact_solve(GraphEnv &in,
   switch (cplex.getCplexStatus()) {
   case IloCplex::CplexStatus::Optimal:
     state = PRICING_OPTIMAL;
+    break;
+  case IloCplex::CplexStatus::AbortUser:
+    state = PRICING_FEASIBLE;
     break;
   case IloCplex::CplexStatus::AbortTimeLim:
     state = PRICING_TIME_EXCEEDED;
@@ -96,29 +203,24 @@ std::tuple<StableEnv, PRICING_STATE> exact_solve(GraphEnv &in,
   }
 
   // Recover solution
-  StableEnv stab;
   if (state == PRICING_OPTIMAL) {
+    IloNumArray valY(cxenv, num_vertices(in.graph));
+    cplex.getValues(y, valY);
+    IloNumArray valWa(cxenv, in.nA);
+    cplex.getValues(wa, valWa);
+    IloNumArray valWb(cxenv, in.nB);
+    cplex.getValues(wb, valWb);
     for (auto v : boost::make_iterator_range(vertices(in.graph)))
-      if (cplex.getValue(y[v]) > 0.5) {
+      if (valY[v] > 0.5)
         stab.stable.push_back(v);
-        TypeA a = in.graph[v].first;
-        stab.cost += duals[in.tyA2idA[a]];
-      }
+    for (size_t iA = 0; iA < in.nA; ++iA)
+      if (valWa[iA] > 0.5)
+        stab.as.push_back(in.idA2TyA[iA]);
     for (size_t iB = 0; iB < in.nB; ++iB)
-      if (cplex.getValue(w[iB]) > 0.5) {
+      if (valWb[iB] > 0.5)
         stab.bs.push_back(in.idB2TyB[iB]);
-        stab.cost -= duals[in.nA + iB];
-      }
+    stab.cost = cplex.getBestObjValue();
   }
-
-  // End CPLEX variables
-  cplex.end();
-  cxcons.end();
-  y.end();
-  w.end();
-  fobj.end();
-  cxmodel.end();
-  cxenv.end();
 
   return std::make_tuple(stab, state);
 }

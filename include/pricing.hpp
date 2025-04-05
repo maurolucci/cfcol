@@ -7,7 +7,60 @@
 #include <ilcplex/cplex.h>
 #include <ilcplex/ilocplex.h>
 
-std::tuple<StableEnv, PRICING_STATE> exact_solve(GraphEnv &in,
-                                                 IloNumArray &duals);
+// This is the class implementing the generic callback interface.
+class ThresholdCallback : public IloCplex::Callback::Function {
+
+private:
+  GraphEnv &in;
+  StableEnv &stab;
+
+  // Variables
+  IloNumVarArray &y;
+  IloNumVarArray &wa;
+  IloNumVarArray &wb;
+
+public:
+  // Constructor with data.
+  ThresholdCallback(GraphEnv &in, StableEnv &stab, IloNumVarArray &y,
+                    IloNumVarArray &wa, IloNumVarArray &wb)
+      : in(in), stab(stab), y(y), wa(wa), wb(wb){};
+
+  inline void check_thresolhd(const IloCplex::Callback::Context &context);
+
+  // This is the function that we have to implement and that CPLEX will call
+  // during the solution process at the places that we asked for.
+  virtual void invoke(const IloCplex::Callback::Context &context) ILO_OVERRIDE;
+
+  /// Destructor
+  ~ThresholdCallback(){};
+};
+
+class PricingEnv {
+
+private:
+  GraphEnv &in;
+  StableEnv stab;
+
+  // CPLEX variables
+  IloEnv cxenv;
+  IloModel cxmodel;
+  IloObjective cxobj;
+  IloNumVarArray y;
+  IloNumVarArray wa;
+  IloNumVarArray wb;
+  IloConstraintArray cxcons;
+  IloCplex cplex;
+  ThresholdCallback cb;
+  CPXLONG contextMask;
+
+  void exact_init();
+
+public:
+  PricingEnv(GraphEnv &in);
+  ~PricingEnv();
+
+  std::tuple<StableEnv, PRICING_STATE> exact_solve(IloNumArray &dualsA,
+                                                   IloNumArray &dualsB);
+};
 
 #endif // __PRICING_HPP__

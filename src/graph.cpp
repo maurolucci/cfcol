@@ -54,7 +54,7 @@ void get_gcp_graph(Graph &src, GCPGraph &dst, std::map<TypeB, size_t> &tyB2idB,
   }
 }
 
-GraphEnv::GraphEnv(const Graph &graph) : GraphEnv(Graph{graph}) {};
+GraphEnv::GraphEnv(const Graph &graph) : GraphEnv(Graph{graph}){};
 
 GraphEnv::GraphEnv(const Graph &&graph) : graph(graph) {
 
@@ -82,13 +82,15 @@ GraphEnv::GraphEnv(const Graph &&graph) : graph(graph) {
   }
 };
 
-GraphEnv::~GraphEnv() {};
+GraphEnv::~GraphEnv(){};
 
-StableEnv::StableEnv() : stable(), bs(), cost(0.0) {};
+StableEnv::StableEnv() : stable(), as(), bs(), cost(0.0){};
 
-StableEnv::StableEnv(VertexVector &stable, std::vector<TypeB> &bs, double cost)
-    : StableEnv(VertexVector{stable}, VertexVector{bs}, cost) {}
+StableEnv::StableEnv(VertexVector &stable, std::vector<TypeB> &as,
+                     std::vector<TypeB> &bs, double cost)
+    : StableEnv(VertexVector{stable}, VertexVector{as}, VertexVector{bs},
+                cost) {}
 
-StableEnv::StableEnv(VertexVector &&stable, std::vector<TypeB> &&bs,
-                     double cost)
-    : stable(stable), bs(bs), cost(cost) {}
+StableEnv::StableEnv(VertexVector &&stable, std::vector<TypeB> &&as,
+                     std::vector<TypeB> &&bs, double cost)
+    : stable(stable), as(as), bs(bs), cost(cost) {}

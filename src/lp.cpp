@@ -7,10 +7,10 @@
 #include <limits>
 #include <numeric>
 
-LP::LP(const Graph &graph) : LP(Graph{graph}) {};
+LP::LP(const Graph &graph) : LP(Graph{graph}){};
 
 LP::LP(const Graph &&graph)
-    : in(GraphEnv(graph)), stables(), posVars(), objVal(-1.0) {};
+    : in(GraphEnv(graph)), stables(), posVars(), objVal(-1.0){};
 
 LP::~LP() {
   // for (size_t i = 0; i < stables.size(); ++i) {
@@ -27,11 +27,12 @@ void LP::initialize(CplexEnv &cenv) {
   // Add constraints
   // Add ">= 1" constraints, one for each a \in A
   for (auto i = in.nA; i > 0; --i)
-    cenv.Xrestr.add(IloRange(cenv.Xenv, 1.0, IloInfinity));
+    cenv.XrestrA.add(IloRange(cenv.Xenv, 1.0, IloInfinity));
   // Add "<= 1" constraints, one for each b \in B
   for (auto i = in.nB; i > 0; --i)
-    cenv.Xrestr.add(IloRange(cenv.Xenv, -1.0, IloInfinity));
-  cenv.Xmodel.add(cenv.Xrestr);
+    cenv.XrestrB.add(IloRange(cenv.Xenv, -1.0, IloInfinity));
+  cenv.Xmodel.add(cenv.XrestrA);
+  cenv.Xmodel.add(cenv.XrestrB);
 
   // Add objective function
   cenv.Xobj = IloMinimize(cenv.Xenv, 0.0);
@@ -43,6 +44,11 @@ void LP::initialize(CplexEnv &cenv) {
   for (size_t iB = 0; iB < in.nB; ++iB) {
     StableEnv stab;
     stab.stable = in.fst[iB];
+    std::set<TypeA> as;
+    for (auto v : stab.stable)
+      as.insert(in.graph[v].first);
+    for (auto a : as)
+      stab.as.push_back(a);
     stab.bs.push_back(in.idB2TyB[iB]);
     add_column(cenv, stab);
   }
@@ -92,14 +98,12 @@ void LP::initialize(CplexEnv &cenv) {
 
 void LP::add_column(CplexEnv &cenv, StableEnv &stab) {
   IloNumColumn column = cenv.Xobj(1.0);
-  for (auto v : stab.stable) {
-    TypeA a = in.graph[v].first;
-    column += cenv.Xrestr[in.tyA2idA[a]](1.0);
-  }
+  for (auto a : stab.as)
+    column += cenv.XrestrA[in.tyA2idA[a]](1.0);
   for (auto b : stab.bs)
-    column += cenv.Xrestr[in.nA + in.tyB2idB[b]](-1.0);
+    column += cenv.XrestrB[in.tyB2idB[b]](-1.0);
   cenv.Xvars.add(IloNumVar(column));
-  stables.push_back(stab.stable);
+  stables.push_back(VertexVector(stab.stable)); // Push a copy
   // *******************************************************************
   // // Print some statics
   // std::cout << "adding column: [";
@@ -107,7 +111,7 @@ void LP::add_column(CplexEnv &cenv, StableEnv &stab) {
   //   auto [a, b] = in.graph[v];
   //   std::cout << " " << v << " = (" << a << ", " << b << ")";
   // }
-  // std::cout << " ]" << std::endl;
+  // std::cout << " ] \t cost: " << stab.cost << std::endl;
   // *******************************************************************
 }
 
@@ -148,6 +152,7 @@ LP_STATE LP::optimize() {
   LP_STATE state = LP_UNSOLVED;
 
   CplexEnv cenv;
+  PricingEnv penv(in);
 
   // MWISenv *mwis_env = NULL;
   // COLORNWT *mwis_pi = NULL;
@@ -156,7 +161,8 @@ LP_STATE LP::optimize() {
   // COLORset *newsets = NULL;
   // int nnewsets = 0;
 
-  IloNumArray duals(cenv.Xenv, in.nA + in.nB);
+  IloNumArray dualsA(cenv.Xenv, in.nA);
+  IloNumArray dualsB(cenv.Xenv, in.nB);
 
   // Check if the input is a GCP instance
   if (in.isGCP)
@@ -220,7 +226,10 @@ LP_STATE LP::optimize() {
     }
 
     // Compute dual value array
-    cplex.getDuals(duals, cenv.Xrestr);
+    cplex.getDuals(dualsA, cenv.XrestrA);
+    cplex.getDuals(dualsB, cenv.XrestrB);
+    for (size_t iB = 0; iB < in.nB; ++iB)
+      dualsB[iB] *= -1.0;
 
     // // Compute vertex weight array
     // auto [changed, nPosWeights] = get_weights(weights, duals);
@@ -324,7 +333,7 @@ LP_STATE LP::optimize() {
     // free(newsets);
 
     // Pricing resolution
-    auto [stab, pricingState] = exact_solve(in, duals);
+    auto [stab, pricingState] = penv.exact_solve(dualsA, dualsB);
 
     // Handle errors
     if (pricingState == PRICING_TIME_EXCEEDED) {
