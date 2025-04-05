@@ -105,13 +105,13 @@ void LP::add_column(CplexEnv &cenv, StableEnv &stab) {
   cenv.Xvars.add(IloNumVar(column));
   stables.push_back(VertexVector(stab.stable)); // Push a copy
   // *******************************************************************
-  // // Print some statics
-  // std::cout << "adding column: [";
-  // for (auto v : stab.stable) {
-  //   auto [a, b] = in.graph[v];
-  //   std::cout << " " << v << " = (" << a << ", " << b << ")";
-  // }
-  // std::cout << " ] \t cost: " << stab.cost << std::endl;
+  // Print some statics
+  std::cout << "adding column: [";
+  for (auto v : stab.stable) {
+    auto [a, b] = in.graph[v];
+    std::cout << " " << v << " = (" << a << ", " << b << ")";
+  }
+  std::cout << " ] \t cost: " << stab.cost << std::endl;
   // *******************************************************************
 }
 
@@ -151,9 +151,6 @@ LP_STATE LP::optimize() {
   auto startTime = std::chrono::high_resolution_clock::now();
   LP_STATE state = LP_UNSOLVED;
 
-  CplexEnv cenv;
-  PricingEnv penv(in);
-
   // MWISenv *mwis_env = NULL;
   // COLORNWT *mwis_pi = NULL;
   // COLORNWT mwis_pi_scalef = 1;
@@ -161,19 +158,21 @@ LP_STATE LP::optimize() {
   // COLORset *newsets = NULL;
   // int nnewsets = 0;
 
-  IloNumArray dualsA(cenv.Xenv, in.nA);
-  IloNumArray dualsB(cenv.Xenv, in.nB);
-
   // Check if the input is a GCP instance
   if (in.isGCP)
     return solve_GCP();
 
   // Initialize cplex environment
+  CplexEnv cenv;
   IloCplex cplex(cenv.Xmodel);
   set_parameters(cenv, cplex);
-
-  // Initialize linear relaxation
   initialize(cenv);
+  IloNumArray dualsA(cenv.Xenv, in.nA);
+  IloNumArray dualsB(cenv.Xenv, in.nB);
+
+  // Initialize pricing environment
+  PricingEnv penv(in);
+  size_t heurTries = N_HEUR_FAILS;
 
   // // Initalize stable environment
   // COLORstable_initenv(&mwis_env, NULL, 0);
@@ -332,24 +331,40 @@ LP_STATE LP::optimize() {
     // // Free memory
     // free(newsets);
 
-    // Pricing resolution
-    auto [stab, pricingState] = penv.exact_solve(dualsA, dualsB);
+    std::pair<StableEnv, PRICING_STATE> res;
+
+    // First, heuristic resolution of pricing
+    if (heurTries > 0) {
+      res = penv.heur_solve(dualsA, dualsB);
+      // Non-optimality check
+      if (res.first.cost > 1 + EPSILON) {
+        std::cout << "Heuristic!" << std::endl;
+        add_column(cenv, res.first);
+        continue;
+      }
+      heurTries--;
+    }
+
+    // Second, exact resolution of pricing
+    res = penv.exact_solve(dualsA, dualsB);
 
     // Handle errors
-    if (pricingState == PRICING_TIME_EXCEEDED) {
+    if (res.second == PRICING_TIME_EXCEEDED) {
       state = LP_TIME_EXCEEDED;
       break;
-    } else if (pricingState == PRICING_MEM_EXCEEDED) {
+    } else if (res.second == PRICING_MEM_EXCEEDED) {
       state = LP_MEM_EXCEEDED;
       break;
     }
 
-    // Optimality check
-    if (stab.cost > 1 + EPSILON) {
-      add_column(cenv, stab);
+    // Non-optimality check
+    if (res.first.cost > 1 + EPSILON) {
+      std::cout << "Exact!" << std::endl;
+      add_column(cenv, res.first);
       continue;
     }
 
+    // Optimality proved
     break;
   }
 

@@ -7,6 +7,8 @@
 #include <ilcplex/cplex.h>
 #include <ilcplex/ilocplex.h>
 
+#define PRICING_EPSILON 0.00001 // 10e-5
+
 // This is the class implementing the generic callback interface.
 class ThresholdCallback : public IloCplex::Callback::Function {
 
@@ -59,8 +61,11 @@ public:
   PricingEnv(GraphEnv &in);
   ~PricingEnv();
 
-  std::tuple<StableEnv, PRICING_STATE> exact_solve(IloNumArray &dualsA,
-                                                   IloNumArray &dualsB);
+  std::pair<StableEnv, PRICING_STATE> heur_solve(IloNumArray &dualsA,
+                                                 IloNumArray &dualsB);
+
+  std::pair<StableEnv, PRICING_STATE> exact_solve(IloNumArray &dualsA,
+                                                  IloNumArray &dualsB);
 };
 
 #endif // __PRICING_HPP__

@@ -1,4 +1,5 @@
 #include "pricing.hpp"
+#include <limits>
 
 #define TIMELIMIT 300.0 // = 5 minutes
 #define THRESHOLD 1.1   // Threshold for early stop
@@ -164,7 +165,7 @@ void PricingEnv::exact_init() {
     cplex.use(&cb, contextMask);
 }
 
-std::tuple<StableEnv, PRICING_STATE>
+std::pair<StableEnv, PRICING_STATE>
 PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 
   // Update objective coefficients
@@ -222,5 +223,86 @@ PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
     stab.cost = cplex.getBestObjValue();
   }
 
-  return std::make_tuple(stab, state);
+  return std::make_pair(stab, state);
+}
+
+std::pair<StableEnv, PRICING_STATE>
+PricingEnv::heur_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+
+  // Reset stable
+  stab.stable.clear();
+  stab.as.clear();
+  stab.bs.clear();
+  stab.cost = 0.0;
+
+  // Create a list with (delta_a - mu_b, v, a, best_b) for all a in A
+  std::list<std::tuple<double, size_t, TypeA, TypeB>> candidates;
+  for (size_t iA = 0; iA < in.nA; ++iA) {
+    // Find best b
+    assert(!in.snd[iA].empty());
+    size_t best_v = 0;
+    TypeB best_b = 0;
+    double best_weight = -std::numeric_limits<double>::max();
+    for (auto v : in.snd[iA]) {
+      size_t b = in.graph[v].second;
+      double weight = dualsA[iA] - dualsB[in.tyB2idB[b]];
+      if (weight > best_weight) {
+        best_weight = weight;
+        best_b = b;
+        best_v = v;
+      }
+    }
+    candidates.push_back(
+        std::make_tuple(best_weight, best_v, in.idA2TyA[iA], best_b));
+  }
+  assert(!candidates.empty());
+
+  // Sort candidates
+  candidates.sort(std::greater<>());
+  std::vector<bool> used(in.nA, false);
+  std::set<TypeB> bs;
+
+  while (!candidates.empty()) {
+
+    // Choose best candidate
+    auto [weight, v, a, b] = candidates.front();
+    candidates.pop_front();
+
+    if (weight < -PRICING_EPSILON || used[in.tyA2idA[a]])
+      continue;
+
+    // Add v = (a,b) to the stable set
+    stab.stable.push_back(v);
+    stab.as.push_back(a);
+    stab.cost += weight;
+    bs.insert(b);
+    used[in.tyA2idA[a]] = true;
+
+    // Remove neighbors of v from the candidate list
+    candidates.remove_if(
+        [v, this](auto p) { return edge(v, std::get<1>(p), in.graph).second; });
+
+    // Use b to represent other vertices
+    for (size_t u : in.fst[in.tyB2idB[b]]) {
+      TypeA au = in.graph[u].first;
+      if (used[in.tyA2idA[au]])
+        continue;
+
+      // Add u = (au,b) to the stable set
+      stab.stable.push_back(u);
+      stab.as.push_back(au);
+      used[in.tyA2idA[au]] = true;
+
+      // Remove neighbors of u from the candidate list
+      candidates.remove_if([u, this](auto p) {
+        return edge(u, std::get<1>(p), in.graph).second;
+      });
+    }
+  }
+
+  // Update bs
+  for (size_t b : bs)
+    stab.bs.push_back(b);
+
+  return std::make_pair(stab, PRICING_FEASIBLE);
 }
