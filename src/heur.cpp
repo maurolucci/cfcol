@@ -95,7 +95,7 @@ void heur_solve_aux(const GraphEnv &genv, const std::vector<TypeA> &as,
 }
 
 Stats heur_solve(const GraphEnv &genv, const std::vector<TypeA> &as, Col &col,
-                 size_t repetitions) {
+                 size_t repetitions, Pool &pool) {
   TimePoint start = ClockType::now();
   Col currentCol;
   std::vector<TypeA> ascopy(as);
@@ -107,15 +107,17 @@ Stats heur_solve(const GraphEnv &genv, const std::vector<TypeA> &as, Col &col,
       minNCol = currentCol.get_n_colors();
       col = currentCol;
     }
+    // Add the stable to the pool
+    for (size_t k = 0; k < currentCol.get_n_colors(); ++k)
+      pool.push_back(currentCol.get_stable(genv.graph, k));
   }
   assert(col.check_coloring(genv.graph));
   TimePoint end = ClockType::now();
-  return Stats{0,
-               0,
-               FEASIBLE,
-               std::chrono::duration<double>(end - start).count(),
-               0,
-               std::numeric_limits<double>::lowest(),
-               static_cast<double>(col.get_n_colors()),
-               std::numeric_limits<double>::max()};
+
+  Stats stats;
+  stats.state = FEASIBLE;
+  stats.time = std::chrono::duration<double>(end - start).count();
+  stats.ub = static_cast<double>(col.get_n_colors());
+
+  return stats;
 }

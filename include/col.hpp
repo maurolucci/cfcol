@@ -36,6 +36,8 @@ public:
 
   [[nodiscard]] bool check_coloring(const Graph &graph) const;
 
+  [[nodiscard]] StableEnv get_stable(const Graph &graph, const Color k) const;
+
 private:
   Coloring coloring;
   ColorClass classes;

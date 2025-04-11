@@ -63,3 +63,14 @@ bool Col::check_coloring(const Graph &graph) const {
 
   return true;
 }
+
+StableEnv Col::get_stable(const Graph &graph, const Color k) const {
+  StableEnv stab;
+  stab.stable.reserve(classes.at(k).size());
+  for (Vertex v : classes.at(k)) {
+    stab.stable.push_back(v);
+    stab.as.insert(graph[v].first);
+    stab.bs.insert(graph[v].second);
+  }
+  return stab;
+}

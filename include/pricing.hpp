@@ -59,23 +59,16 @@ private:
   ThresholdCallback cb;
   CPXLONG contextMask;
 
-  // Heuristic pricing variables
   std::list<std::tuple<double, size_t, TypeA, TypeB>> heurCandidates;
 
   void exact_init();
-
-  void try_stable_add(double weight, size_t v, TypeA a, TypeB b,
-                      IloNumArray &dualsA, std::vector<bool> &used,
-                      std::set<TypeB> &bs);
 
 public:
   PricingEnv(GraphEnv &in);
   ~PricingEnv();
 
-  void heur_init(IloNumArray &dualsA, IloNumArray &dualsB);
-
   std::pair<StableEnv, PRICING_STATE>
-  heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, TypeA first);
+  heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, Vertex v_first);
 
   std::pair<StableEnv, PRICING_STATE>
   exact_solve(IloNumArray &dualsA, IloNumArray &dualsB, double timelimit);

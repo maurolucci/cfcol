@@ -86,11 +86,10 @@ GraphEnv::~GraphEnv(){};
 
 StableEnv::StableEnv() : stable(), as(), bs(), cost(0.0){};
 
-StableEnv::StableEnv(VertexVector &stable, std::vector<TypeB> &as,
-                     std::vector<TypeB> &bs, double cost)
-    : StableEnv(VertexVector{stable}, VertexVector{as}, VertexVector{bs},
-                cost) {}
+StableEnv::StableEnv(VertexVector &stable, std::set<TypeB> &as,
+                     std::set<TypeB> &bs, double cost)
+    : StableEnv(VertexVector{stable}, VertexSet{as}, VertexSet{bs}, cost) {}
 
-StableEnv::StableEnv(VertexVector &&stable, std::vector<TypeB> &&as,
-                     std::vector<TypeB> &&bs, double cost)
+StableEnv::StableEnv(VertexVector &&stable, std::set<TypeB> &&as,
+                     std::set<TypeB> &&bs, double cost)
     : stable(stable), as(as), bs(bs), cost(cost) {}

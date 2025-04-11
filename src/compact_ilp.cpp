@@ -19,6 +19,7 @@ Stats solve_ilp(const Graph &graph, size_t ncolors, std::ostream &log,
   IloArray<IloNumVarArray> x(cxenv, num_vertices(graph));
   IloNumVarArray w(cxenv, ncolors);
   IloConstraintArray cxcons(cxenv);
+  Stats stats;
 
   // Define variables
   for (size_t v = 0; v < num_vertices(graph); ++v) {
@@ -109,6 +110,7 @@ Stats solve_ilp(const Graph &graph, size_t ncolors, std::ostream &log,
     cplex.addMIPStart(startVar, startVal);
     startVal.end();
     startVar.end();
+    stats.initSol = initialCol.get_n_colors();
   }
 
   // Set parameters
@@ -156,16 +158,14 @@ Stats solve_ilp(const Graph &graph, size_t ncolors, std::ostream &log,
     assert(col.check_coloring(graph));
   }
 
-  Stats stats = {static_cast<size_t>(cplex.getNcols()),
-                 static_cast<size_t>(cplex.getNrows()),
-                 state,
-                 cplex.getTime(),
-                 static_cast<size_t>(cplex.getNnodes()),
-                 cplex.getBestObjValue(),
-                 -DBL_MAX,
-                 DBL_MAX};
+  stats.nvars = static_cast<int>(cplex.getNcols());
+  stats.ncons = static_cast<int>(cplex.getNrows());
+  stats.state = state;
+  stats.time = cplex.getTime();
+  stats.nodes = static_cast<int>(cplex.getNnodes());
+  stats.lb = cplex.getBestObjValue();
   if (state == OPTIMAL || state == FEASIBLE) {
-    stats.ub = cplex.getObjValue();
+    stats.ub = static_cast<int>(cplex.getObjValue() + 0.5);
     stats.gap = cplex.getMIPRelativeGap();
   }
 

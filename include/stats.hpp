@@ -2,6 +2,7 @@
 #define __STATS_HPP__
 
 #include <iostream>
+#include <limits>
 #include <string>
 
 enum PRICING_STATE {
@@ -33,14 +34,24 @@ enum STATE {
 };
 
 struct Stats {
-  size_t nvars;
-  size_t ncons;
+  int nvars;
+  int ncons;
   STATE state;
   double time;
-  size_t nodes;
+  int nodes;
+  int initSol;
   double lb;
-  double ub;
+  int ub;
   double gap;
+  int poolSize;
+  int ncolsPool;
+  int ncolsHeur;
+  int ncolsExact;
+
+  Stats()
+      : nvars(-1), ncons(-1), state(UNKNOWN), time(-1.0), nodes(-1),
+        initSol(-1), lb(-1.0), ub(-1), gap(-1.0), poolSize(-1), ncolsPool(-1),
+        ncolsHeur(-1), ncolsExact(-1){};
 
   std::string get_state_as_str();
   void write_stats(std::ostream &file);

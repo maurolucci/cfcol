@@ -23,17 +23,35 @@ std::string Stats::get_state_as_str() {
 
 void Stats::write_stats(std::ostream &file) {
   file << nvars << "," << ncons << "," << get_state_as_str() << "," << time
-       << "," << nodes << "," << lb << "," << ub << "," << gap << std::endl;
+       << "," << nodes << "," << initSol << "," << lb << "," << ub << "," << gap
+       << "," << poolSize << "," << ncolsPool << "," << ncolsHeur << ","
+       << ncolsExact << std::endl;
 }
 
 void Stats::print_stats(std::ostream &file) {
   file << std::endl << "*** Stats ***" << std::endl;
-  file << "Variables: " << nvars << std::endl;
-  file << "Constraints: " << ncons << std::endl;
+  if (nvars != -1)
+    file << "Variables: " << nvars << std::endl;
+  if (ncons != -1)
+    file << "Constraints: " << ncons << std::endl;
   file << "State: " << get_state_as_str() << std::endl;
-  file << "Time: " << time << std::endl; // To seconds
-  file << "Nodes: " << nodes << std::endl;
-  file << "Lower bound: " << lb << std::endl;
-  file << "Upper bound: " << ub << std::endl;
-  file << "Gap: " << gap << std::endl;
+  file << "Time: " << time << std::endl;
+  if (nodes != -1)
+    file << "Nodes: " << nodes << std::endl;
+  if (initSol != -1)
+    file << "Initial solution: " << initSol << std::endl;
+  if (lb != -1.0)
+    file << "Lower bound: " << lb << std::endl;
+  if (ub != -1)
+    file << "Upper bound: " << ub << std::endl;
+  if (gap != -1)
+    file << "Gap: " << gap << std::endl;
+  if (poolSize != -1)
+    file << "Size of pool: " << poolSize << std::endl;
+  if (ncolsPool != -1)
+    file << "Pool columns: " << ncolsPool << std::endl;
+  if (ncolsHeur != -1)
+    file << "Heuristic columns: " << ncolsHeur << std::endl;
+  if (ncolsExact != -1)
+    file << "Exact columns: " << ncolsExact << std::endl;
 }

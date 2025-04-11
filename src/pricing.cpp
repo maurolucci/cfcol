@@ -18,10 +18,10 @@ void ThresholdCallback::check_thresolhd(
           stab.stable.push_back(v);
       for (size_t iA = 0; iA < in.nA; ++iA)
         if (valWa[iA] > 0.5)
-          stab.as.push_back(in.idA2TyA[iA]);
+          stab.as.insert(in.idA2TyA[iA]);
       for (size_t iB = 0; iB < in.nB; ++iB)
         if (valWb[iB] > 0.5)
-          stab.bs.push_back(in.idB2TyB[iB]);
+          stab.bs.insert(in.idB2TyB[iB]);
       stab.cost = context.getCandidateObjective();
       // Abort execution
       context.abort();
@@ -213,91 +213,36 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
         stab.stable.push_back(v);
     for (size_t iA = 0; iA < in.nA; ++iA)
       if (valWa[iA] > 0.5)
-        stab.as.push_back(in.idA2TyA[iA]);
+        stab.as.insert(in.idA2TyA[iA]);
     for (size_t iB = 0; iB < in.nB; ++iB)
       if (valWb[iB] > 0.5)
-        stab.bs.push_back(in.idB2TyB[iB]);
+        stab.bs.insert(in.idB2TyB[iB]);
     stab.cost = cplex.getBestObjValue();
+  } else if (state == PRICING_FEASIBLE) {
+    // Maximalize stable
+    for (Vertex v : boost::make_iterator_range(vertices(in.graph))) {
+      auto [a, b] = in.graph[v];
+      if (dualsA[in.tyA2idA[a]] < PRICING_EPSILON || stab.as.contains(a))
+        continue;
+      if (!stab.bs.contains(b))
+        continue;
+      auto it = std::find_if(
+          stab.stable.begin(), stab.stable.end(),
+          [v, this](auto w) { return edge(v, w, in.graph).second; });
+      if (it != stab.stable.end())
+        continue;
+      stab.stable.push_back(v);
+      stab.as.insert(a);
+      stab.cost += dualsA[in.tyA2idA[a]];
+    }
   }
 
   return std::make_pair(stab, state);
 }
 
-void PricingEnv::heur_init(IloNumArray &dualsA, IloNumArray &dualsB) {
-
-  // Create a list with (delta_a - mu_b, v, a, best_b) for all a in A
-  heurCandidates.clear();
-  for (size_t iA = 0; iA < in.nA; ++iA) {
-    // Find best b
-    assert(!in.snd[iA].empty());
-    size_t best_v = 0;
-    TypeB best_b = 0;
-    double best_weight = -std::numeric_limits<double>::max();
-    for (auto v : in.snd[iA]) {
-      size_t b = in.graph[v].second;
-      double weight = dualsA[iA] + dualsB[in.tyB2idB[b]];
-      if (weight > best_weight) {
-        best_weight = weight;
-        best_b = b;
-        best_v = v;
-      }
-    }
-    heurCandidates.push_back(
-        std::make_tuple(best_weight, best_v, in.idA2TyA[iA], best_b));
-  }
-  assert(!heurCandidates.empty());
-
-  // Sort candidates
-  heurCandidates.sort(std::greater<>());
-}
-
-void PricingEnv::try_stable_add(double weight, size_t v, TypeA a, TypeB b,
-                                IloNumArray &dualsA, std::vector<bool> &used,
-                                std::set<TypeB> &bs) {
-  if (used[in.tyA2idA[a]])
-    return;
-
-  if (std::find_if(stab.stable.begin(), stab.stable.end(), [v, this](auto w) {
-        return edge(v, w, in.graph).second;
-      }) != stab.stable.end())
-    return;
-
-  // Add v = (a,b) to the stable set
-  stab.stable.push_back(v);
-  stab.as.push_back(a);
-  stab.cost += weight;
-  bs.insert(b);
-  used[in.tyA2idA[a]] = true;
-
-  // Use b to represent other vertices
-  std::shuffle(in.fst[in.tyB2idB[b]].begin(), in.fst[in.tyB2idB[b]].end(), rng);
-  for (size_t u : in.fst[in.tyB2idB[b]]) {
-
-    if (rand_double(rng) < 0.5)
-      continue;
-
-    if (edge(v, u, in.graph).second)
-      continue;
-
-    TypeA au = in.graph[u].first;
-    if (used[in.tyA2idA[au]])
-      continue;
-
-    if (std::find_if(stab.stable.begin(), stab.stable.end(), [u, this](auto w) {
-          return edge(u, w, in.graph).second;
-        }) != stab.stable.end())
-      continue;
-
-    // Add u = (au,b) to the stable set
-    stab.stable.push_back(u);
-    stab.as.push_back(au);
-    stab.cost += dualsA[in.tyA2idA[au]];
-    used[in.tyA2idA[au]] = true;
-  }
-}
-
-std::pair<StableEnv, PRICING_STATE>
-PricingEnv::heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, TypeA first) {
+std::pair<StableEnv, PRICING_STATE> PricingEnv::heur_solve(IloNumArray &dualsA,
+                                                           IloNumArray &dualsB,
+                                                           Vertex start_v) {
 
   // Reset stable
   stab.stable.clear();
@@ -305,24 +250,63 @@ PricingEnv::heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, TypeA first) {
   stab.bs.clear();
   stab.cost = 0.0;
 
-  std::vector<bool> used(in.nA, false);
-  std::set<TypeB> bs;
-
-  // Add the first vertex to start the sable set
-  auto it = std::find_if(heurCandidates.begin(), heurCandidates.end(),
-                         [first](auto p) { return std::get<2>(p) == first; });
-  assert(it != heurCandidates.end());
-  try_stable_add(std::get<0>(*it), std::get<1>(*it), std::get<2>(*it),
-                 std::get<3>(*it), dualsA, used, bs);
-
-  for (auto [weight, v, a, b] : heurCandidates) {
-    // Try to add candidate to the stable set
-    try_stable_add(weight, v, a, b, dualsA, used, bs);
+  // Candidates
+  std::list<std::pair<double, Vertex>> candidates;
+  TypeA start_a = in.graph[start_v].first;
+  TypeA start_b = in.graph[start_v].second;
+  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
+    auto [a, b] = in.graph[v];
+    double cost_a = dualsA[in.tyA2idA[a]];
+    double cost_b = dualsB[in.tyB2idB[b]];
+    if (v == start_v) {
+      stab.stable.push_back(start_v);
+      stab.as.insert(start_a);
+      stab.bs.insert(start_b);
+      stab.cost += cost_a + cost_b;
+      continue;
+    }
+    if (a == start_a || edge(start_v, v, in.graph).second)
+      continue;
+    if (b == start_v) {
+      candidates.push_back(std::make_pair(cost_a, v));
+      continue;
+    }
+    candidates.push_back(std::make_pair(cost_a + cost_b, v));
   }
 
-  // Update bs
-  for (size_t b : bs)
-    stab.bs.push_back(b);
+  while (!candidates.empty()) {
+
+    // Find the best candidate
+    auto it_v = std::max_element(candidates.begin(), candidates.end());
+
+    // Discard best candidate with some low probability
+    if (rand_double(rng) < 0.05) {
+      candidates.erase(it_v);
+      continue;
+    }
+
+    Vertex v = it_v->second;
+    auto [a, b] = in.graph[v];
+
+    // Add the best candidate to the stable set
+    stab.stable.push_back(v);
+    stab.as.insert(a);
+    stab.bs.insert(b);
+    stab.cost += it_v->first;
+
+    // Remove and update weights in the candidate list
+    for (auto it = candidates.begin(); it != candidates.end();) {
+      Vertex u = it->second;
+      auto [au, bu] = in.graph[u];
+      if (au == a || edge(u, v, in.graph).second) {
+        it = candidates.erase(it);
+        continue;
+      }
+      if (bu == b)
+        it->first = dualsA[in.tyA2idA[au]];
+      ++it;
+    }
+  }
 
   return std::make_pair(stab, PRICING_FEASIBLE);
 }

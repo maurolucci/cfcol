@@ -3,4 +3,4 @@
 #include "stats.hpp"
 
 Stats heur_solve(const GraphEnv &genv, const std::vector<TypeA> &as, Col &col,
-                 size_t repetitions);
+                 size_t repetitions, Pool &pool);

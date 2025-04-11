@@ -34,11 +34,16 @@ public:
     return (get_obj_value() < n.get_obj_value());
   }
 
-  LP_STATE solve(double timelimit) { return lp->optimize(timelimit); }
+  LP_STATE solve(double timelimit, size_t &ncolsPool, size_t &ncolsHeur,
+                 size_t &ncolsExact) {
+    LP_STATE state = lp->optimize(timelimit);
+    ncolsPool += lp->get_n_pool_columns();
+    ncolsHeur += lp->get_n_heur_columns();
+    ncolsExact += lp->get_n_exact_columns();
+    return state;
+  }
 
   template <class Solution> void save(Solution &sol) { lp->save_solution(sol); }
-
-  int get_n_columns() { return lp->get_n_columns(); }
 
   void branch(std::vector<Node *> &sons) {
 
@@ -61,7 +66,13 @@ template <class Solution> class BP {
 public:
   BP(Solution &sol, std::ostream &log, bool DFS = false)
       : best_integer_solution(sol), primal_bound(DBL_MAX), nodes(0), DFS(DFS),
-        log(log) {}
+        log(log), ncolsPool(0), ncolsHeur(0), ncolsExact(0),
+        initSolValue(-1.0) {}
+
+  void set_initial_solution(Solution &initSol, double initValue) {
+    initSolValue = primal_bound = initValue;
+    best_integer_solution = initSol;
+  }
 
   Stats solve(Node *root) {
 
@@ -151,26 +162,37 @@ private:
   int opt_flag;      // Optimality flag
   bool DFS;
   std::ostream &log;
+  size_t ncolsPool;
+  size_t ncolsHeur;
+  size_t ncolsExact;
+  double initSolValue; // Value of the provided initial solution
 
   Stats return_stats(STATE state) {
-    double elapsed =
+    Stats stats;
+    stats.state = state;
+    stats.time =
         std::chrono::duration<double>(ClockType::now() - start_t).count();
-    if (elapsed > MAXTIME) {
-      elapsed = MAXTIME;
-      state = primal_bound == DBL_MAX ? TIME_EXCEEDED : FEASIBLE;
+    if (stats.time > MAXTIME) {
+      stats.time = MAXTIME;
+      stats.state = primal_bound == DBL_MAX ? TIME_EXCEEDED : FEASIBLE;
     }
-    double dual_bound, gap;
+    stats.nodes = static_cast<int>(nodes);
+    stats.ub = static_cast<int>(primal_bound + 0.5);
     if (state == OPTIMAL) {
-      dual_bound = primal_bound;
-      gap = 0.0;
+      stats.lb = primal_bound;
+      stats.gap = 0.0;
     } else if (state == INFEASIBLE) {
-      dual_bound = -DBL_MAX;
-      gap = DBL_MAX;
+      ;
     } else {
-      dual_bound = calculate_dual_bound();
-      gap = get_gap() * 100;
+      stats.lb = calculate_dual_bound();
+      stats.gap = get_gap() * 100;
     }
-    return (Stats){0, 0, state, elapsed, nodes, dual_bound, primal_bound, gap};
+    stats.ncolsPool = static_cast<int>(ncolsPool);
+    stats.ncolsHeur = static_cast<int>(ncolsHeur);
+    stats.ncolsExact = static_cast<int>(ncolsExact);
+    stats.initSol = static_cast<int>(initSolValue + 0.5);
+
+    return stats;
   }
 
   LP_STATE push(Node *node) {
@@ -182,7 +204,8 @@ private:
     double elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                          ClockType::now() - start_t)
                          .count();
-    LP_STATE state = node->solve(MAXTIME - elapsed);
+    LP_STATE state =
+        node->solve(MAXTIME - elapsed, ncolsPool, ncolsHeur, ncolsExact);
 
     switch (state) {
 

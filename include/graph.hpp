@@ -14,6 +14,7 @@ using Graph =
 using Vertex = Graph::vertex_descriptor;
 
 using VertexVector = std::vector<Vertex>;
+using VertexSet = std::set<Vertex>;
 
 using HGraph = hglib::UndirectedHypergraph<>;
 using HVertex = hglib::VertexIdType;
@@ -51,17 +52,19 @@ struct GraphEnv {
 };
 
 struct StableEnv {
-  VertexVector stable;   // stable set
-  std::vector<TypeA> as; // vector of A-values from the stable set, i.e. {a \in
-                         // A: (a,b) \in S for some b \in B}
-  std::vector<TypeB> bs; // vector of B-values from the stable set, i.e. {b \in
-                         // B: (a,b) \in S for some a \in A}
+  VertexVector stable; // stable set
+  std::set<TypeA> as;  // set of A-values from the stable set, i.e. {a \in
+                       // A: (a,b) \in S for some b \in B}
+  std::set<TypeB> bs;  // set of B-values from the stable set, i.e. {b \in
+                       // B: (a,b) \in S for some a \in A}
   double cost;
   StableEnv();
-  StableEnv(VertexVector &stable, std::vector<TypeB> &as,
-            std::vector<TypeB> &bs, double cost);
-  StableEnv(VertexVector &&stable, std::vector<TypeB> &&as,
-            std::vector<TypeB> &&bs, double cost);
+  StableEnv(VertexVector &stable, std::set<TypeB> &as, std::set<TypeB> &bs,
+            double cost);
+  StableEnv(VertexVector &&stable, std::set<TypeB> &&as, std::set<TypeB> &&bs,
+            double cost);
 };
+
+using Pool = std::vector<StableEnv>;
 
 #endif //_GRAPH_HPP_

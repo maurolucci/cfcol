@@ -22,7 +22,7 @@ std::string SEPBAR =
 int main() {
 
   // Set seed
-  set_seed(0);
+  rng.seed(0);
 
   for (const auto &file : recursive_directory_iterator("input/tests/")) {
 
@@ -54,12 +54,26 @@ int main() {
     Graph gcopy;
     boost::copy_graph(graph, gcopy);
 
-    // Solve with heuristic
+    // Solve with heuristic and fill the pool of columns
     GraphEnv genv(gcopy);
     Col dsaturCol;
+    Pool pool;
     std::cout << "Running heuristic..." << std::endl;
-    Stats stats0 = heur_solve(genv, genv.idA2TyA, dsaturCol, 200);
+    Stats stats0 = heur_solve(genv, genv.idA2TyA, dsaturCol, 100, pool);
     stats0.print_stats(std::cout);
+
+    std::cout << std::endl << SEPBAR << std::endl << std::endl;
+
+    // Solve with branch and price
+    std::cout << "Running B&P..." << std::endl;
+    Col col;
+    LP *lp = new LP(graph, pool, gcopy, &dsaturCol);
+    Node *root = new Node(lp);
+    BP<Col> bp(col, std::cout, false);
+    bp.set_initial_solution(dsaturCol, dsaturCol.get_n_colors());
+    Stats stats1 = bp.solve(root);
+    stats1.poolSize = pool.size();
+    stats1.print_stats(std::cout);
 
     std::cout << std::endl << SEPBAR << std::endl << std::endl;
 
@@ -69,18 +83,10 @@ int main() {
         solve_ilp(gcopy, dsaturCol.get_n_colors(), std::cout, dsaturCol);
     stats2.print_stats(std::cout);
 
-    std::cout << std::endl << SEPBAR << std::endl << std::endl;
-
-    // Solve with branch and price
-    std::cout << "Running B&P..." << std::endl;
-    Col col;
-    LP *lp = new LP(graph);
-    Node *root = new Node(lp);
-    BP<Col> bp(col, std::cout, false);
-    Stats stats1 = bp.solve(root);
-    stats1.print_stats(std::cout);
-
-    std::cout << std::endl << SEPBAR << std::endl << std::endl;
+    std::cout << std::endl << SEPBAR << std::endl;
+    std::cout << SEPBAR << std::endl;
+    std::cout << SEPBAR << std::endl;
+    std::cout << SEPBAR << std::endl << std::endl;
 
     if (stats1.state == OPTIMAL && stats2.state == OPTIMAL) {
       assert(round(stats1.ub) == round(stats2.ub));
