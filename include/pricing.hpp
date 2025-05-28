@@ -20,14 +20,13 @@ private:
 
   // Variables
   IloNumVarArray &y;
-  IloNumVarArray &wa;
-  IloNumVarArray &wb;
+  IloNumVarArray &w;
 
 public:
   // Constructor with data.
   ThresholdCallback(GraphEnv &in, StableEnv &stab, IloNumVarArray &y,
-                    IloNumVarArray &wa, IloNumVarArray &wb)
-      : in(in), stab(stab), y(y), wa(wa), wb(wb){};
+                    IloNumVarArray &w)
+      : in(in), stab(stab), y(y), w(w){};
 
   inline void check_thresolhd(const IloCplex::Callback::Context &context);
 
@@ -50,8 +49,7 @@ private:
   IloModel cxmodel;
   IloObjective cxobj;
   IloNumVarArray y;
-  IloNumVarArray wa;
-  IloNumVarArray wb;
+  IloNumVarArray w;
   IloConstraintArray cxcons;
   IloCplex cplex;
 

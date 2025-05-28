@@ -185,7 +185,7 @@ private:
       ;
     } else {
       stats.lb = calculate_dual_bound();
-      stats.gap = get_gap() * 100;
+      stats.gap = get_gap() / 100;
     }
     stats.ncolsPool = static_cast<int>(ncolsPool);
     stats.ncolsHeur = static_cast<int>(ncolsHeur);

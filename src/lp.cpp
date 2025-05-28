@@ -192,7 +192,7 @@ bool LP::check_stable(StableEnv &stab, IloNumArray &dualsA,
   for (TypeA a : stab.as)
     cost += dualsA[in.tyA2idA[a]];
   for (TypeB b : stab.bs)
-    cost += dualsB[in.tyB2idB[b]];
+    cost -= dualsB[in.tyB2idB[b]];
 
   return cost > 1 + EPSILON;
 }
@@ -283,8 +283,6 @@ LP_STATE LP::optimize(double timelimit) {
     // Compute dual value array
     cplex.getDuals(dualsA, cenv.XrestrA);
     cplex.getDuals(dualsB, cenv.XrestrB);
-    for (size_t iB = 0; iB < in.nB; ++iB)
-      dualsB[iB] *= -1.0;
 
     // // Compute vertex weight array
     // auto [changed, nPosWeights] = get_weights(weights, duals);

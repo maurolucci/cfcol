@@ -2,6 +2,7 @@
 #include "random.hpp"
 #include <limits>
 
+// Generic callback: abort when the threshold is exceeded.
 void ThresholdCallback::check_thresolhd(
     const IloCplex::Callback::Context &context) {
   if (context.isCandidatePoint())
@@ -9,16 +10,13 @@ void ThresholdCallback::check_thresolhd(
       // Save stable set
       IloNumArray valY(context.getEnv(), num_vertices(in.graph));
       context.getCandidatePoint(y, valY);
-      IloNumArray valWa(context.getEnv(), in.nA);
-      context.getCandidatePoint(wa, valWa);
       IloNumArray valWb(context.getEnv(), in.nB);
-      context.getCandidatePoint(wb, valWb);
+      context.getCandidatePoint(w, valWb);
       for (auto v : boost::make_iterator_range(vertices(in.graph)))
-        if (valY[v] > 0.5)
+        if (valY[v] > 0.5) {
           stab.stable.push_back(v);
-      for (size_t iA = 0; iA < in.nA; ++iA)
-        if (valWa[iA] > 0.5)
-          stab.as.insert(in.idA2TyA[iA]);
+          stab.as.insert(in.graph[v].first);
+        }
       for (size_t iB = 0; iB < in.nB; ++iB)
         if (valWb[iB] > 0.5)
           stab.bs.insert(in.idB2TyB[iB]);
@@ -40,8 +38,8 @@ void ThresholdCallback::invoke(const IloCplex::Callback::Context &context) {
 
 PricingEnv::PricingEnv(GraphEnv &in)
     : in(in), stab(), cxenv(), cxmodel(cxenv), y(cxenv, num_vertices(in.graph)),
-      wa(cxenv, in.nA), wb(cxenv, in.nB), cxcons(cxenv), cplex(cxenv),
-      cb(in, stab, y, wa, wb), contextMask(0) {
+      w(cxenv, in.nB), cxcons(cxenv), cplex(cxenv), cb(in, stab, y, w),
+      contextMask(0) {
   exact_init();
 }
 
@@ -50,14 +48,14 @@ PricingEnv::~PricingEnv() {
   cplex.end();
   cxcons.end();
   y.end();
-  wa.end();
-  wb.end();
+  w.end();
   cxobj.end();
   cxmodel.end();
   cxenv.end();
 }
 
 void PricingEnv::exact_init() {
+
   // Variables
   for (auto v : boost::make_iterator_range(vertices(in.graph))) {
     char name[100];
@@ -65,23 +63,18 @@ void PricingEnv::exact_init() {
              in.graph[v].second);
     y[v] = IloBoolVar(cxenv, name);
   }
-  for (size_t iA = 0; iA < in.nA; ++iA) {
-    char name[100];
-    snprintf(name, sizeof(name), "wa_%ld", iA);
-    wa[iA] = IloBoolVar(cxenv, name);
-  }
   for (size_t iB = 0; iB < in.nB; ++iB) {
     char name[100];
-    snprintf(name, sizeof(name), "wb_%ld", iB);
-    wb[iB] = IloBoolVar(cxenv, name);
+    snprintf(name, sizeof(name), "w_%ld", iB);
+    w[iB] = IloBoolVar(cxenv, name);
   }
 
   // Objective
   IloExpr obj(cxenv);
-  for (size_t iA = 0; iA < in.nA; ++iA)
-    obj += wa[iA] * 1.0;
+  for (auto v : boost::make_iterator_range(vertices(in.graph)))
+    obj += y[v] * 1.0;
   for (size_t iB = 0; iB < in.nB; ++iB)
-    obj += wb[iB] * (-1.0);
+    obj += w[iB] * (-1.0);
   cxobj = IloMaximize(cxenv, obj);
   cxmodel.add(cxobj);
   obj.end();
@@ -108,32 +101,18 @@ void PricingEnv::exact_init() {
     restr.end();
   }
 
-  // (3a) y_a_b <= wa_a, for all (a,b) \in V
+  // (3) y_a_b <= w_b, for all (a,b) \in V
   for (auto v : boost::make_iterator_range(vertices(in.graph))) {
     IloExpr restr(cxenv);
-    restr += y[v] - wa[in.tyA2idA[in.graph[v].first]];
-    cxcons.add(restr <= 0);
-    restr.end();
-  }
-  for (size_t iA = 0; iA < in.nA; ++iA) {
-    IloExpr restr(cxenv);
-    restr += wa[iA];
-    for (auto v : in.snd[iA])
-      restr -= y[v];
+    restr += y[v] - w[in.tyB2idB[in.graph[v].second]];
     cxcons.add(restr <= 0);
     restr.end();
   }
 
-  // (3b) y_a_b <= wb_b, for all (a,b) \in V
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
-    IloExpr restr(cxenv);
-    restr += y[v] - wb[in.tyB2idB[in.graph[v].second]];
-    cxcons.add(restr <= 0);
-    restr.end();
-  }
+  // (4) w_b <= \sum_{v in V^b} y_v, for all b \in B
   for (size_t iB = 0; iB < in.nB; ++iB) {
     IloExpr restr(cxenv);
-    restr += wb[iB];
+    restr += w[iB];
     for (auto v : in.fst[iB])
       restr -= y[v];
     cxcons.add(restr <= 0);
@@ -164,9 +143,16 @@ void PricingEnv::exact_init() {
 std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
                                                             IloNumArray &dualsB,
                                                             double timelimit) {
+
   // Update objective coefficients
-  cxobj.setLinearCoefs(wa, dualsA);
-  cxobj.setLinearCoefs(wb, dualsB);
+  IloNumArray y_coefs(cxenv, num_vertices(in.graph));
+  for (auto v : boost::make_iterator_range(vertices(in.graph)))
+    y_coefs[v] = dualsA[in.tyA2idA[in.graph[v].first]];
+  IloNumArray w_coefs(cxenv, in.nB);
+  for (size_t iB = 0; iB < in.nB; ++iB)
+    w_coefs[iB] = -dualsB[iB];
+  cxobj.setLinearCoefs(y, y_coefs);
+  cxobj.setLinearCoefs(w, w_coefs);
   cxmodel.add(cxobj);
 
   // Reset stable
@@ -204,18 +190,15 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
   if (state == PRICING_OPTIMAL) {
     IloNumArray valY(cxenv, num_vertices(in.graph));
     cplex.getValues(y, valY);
-    IloNumArray valWa(cxenv, in.nA);
-    cplex.getValues(wa, valWa);
-    IloNumArray valWb(cxenv, in.nB);
-    cplex.getValues(wb, valWb);
+    IloNumArray valW(cxenv, in.nB);
+    cplex.getValues(w, valW);
     for (auto v : boost::make_iterator_range(vertices(in.graph)))
-      if (valY[v] > 0.5)
+      if (valY[v] > 0.5) {
         stab.stable.push_back(v);
-    for (size_t iA = 0; iA < in.nA; ++iA)
-      if (valWa[iA] > 0.5)
-        stab.as.insert(in.idA2TyA[iA]);
+        stab.as.insert(in.graph[v].first);
+      }
     for (size_t iB = 0; iB < in.nB; ++iB)
-      if (valWb[iB] > 0.5)
+      if (valW[iB] > 0.5)
         stab.bs.insert(in.idB2TyB[iB]);
     stab.cost = cplex.getBestObjValue();
   } else if (state == PRICING_FEASIBLE) {
@@ -262,16 +245,16 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::heur_solve(IloNumArray &dualsA,
       stab.stable.push_back(start_v);
       stab.as.insert(start_a);
       stab.bs.insert(start_b);
-      stab.cost += cost_a + cost_b;
+      stab.cost += cost_a - cost_b;
       continue;
     }
     if (a == start_a || edge(start_v, v, in.graph).second)
       continue;
-    if (b == start_v) {
+    if (b == start_b) {
       candidates.push_back(std::make_pair(cost_a, v));
       continue;
     }
-    candidates.push_back(std::make_pair(cost_a + cost_b, v));
+    candidates.push_back(std::make_pair(cost_a - cost_b, v));
   }
 
   while (!candidates.empty()) {
