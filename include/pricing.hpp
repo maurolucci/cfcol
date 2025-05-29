@@ -3,6 +3,11 @@
 
 #include "graph.hpp"
 #include "stats.hpp"
+extern "C" {
+#include "color.h"
+#include "color_private.h"
+#include "mwis.h"
+}
 
 #include <ilcplex/cplex.h>
 #include <ilcplex/ilocplex.h>
@@ -26,7 +31,7 @@ public:
   // Constructor with data.
   ThresholdCallback(GraphEnv &in, StableEnv &stab, IloNumVarArray &y,
                     IloNumVarArray &w)
-      : in(in), stab(stab), y(y), w(w){};
+      : in(in), stab(stab), y(y), w(w) {};
 
   inline void check_thresolhd(const IloCplex::Callback::Context &context);
 
@@ -35,7 +40,7 @@ public:
   virtual void invoke(const IloCplex::Callback::Context &context) ILO_OVERRIDE;
 
   /// Destructor
-  ~ThresholdCallback(){};
+  ~ThresholdCallback() {};
 };
 
 class PricingEnv {
@@ -57,9 +62,26 @@ private:
   ThresholdCallback cb;
   CPXLONG contextMask;
 
-  std::list<std::tuple<double, size_t, TypeA, TypeB>> heurCandidates;
+  // MWIS variables
+  MWISenv *mwis_env;
+  COLORNWT *mwis_pi;
+  COLORNWT mwis_pi_scalef;
+  COLORset *newsets;
+  int nnewsets;
+  // std::vector<int> toPosVertex;
+  // std::vector<int> toVertex;
+  int ecount;
+  int *elist;
 
   void exact_init();
+  void mwis_init();
+
+  // std::pair<bool, size_t> get_weights(std::vector<double> &weights,
+  //                                    IloNumArray &dualsA, IloNumArray
+  //                                    &dualsB);
+
+  int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
+                      const std::vector<double> &dbl_weights);
 
 public:
   PricingEnv(GraphEnv &in);
@@ -67,6 +89,9 @@ public:
 
   std::pair<StableEnv, PRICING_STATE>
   heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, Vertex v_first);
+
+  std::pair<StableEnv, PRICING_STATE> mwis2_solve(IloNumArray &dualsA,
+                                                  IloNumArray &dualsB);
 
   std::pair<StableEnv, PRICING_STATE>
   exact_solve(IloNumArray &dualsA, IloNumArray &dualsB, double timelimit);

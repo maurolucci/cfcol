@@ -1,8 +1,10 @@
 #include "pricing.hpp"
 #include "random.hpp"
+#include <cfloat>
 #include <limits>
 
 // Generic callback: abort when the threshold is exceeded.
+// Implementation of early stop.
 void ThresholdCallback::check_thresolhd(
     const IloCplex::Callback::Context &context) {
   if (context.isCandidatePoint())
@@ -39,8 +41,10 @@ void ThresholdCallback::invoke(const IloCplex::Callback::Context &context) {
 PricingEnv::PricingEnv(GraphEnv &in)
     : in(in), stab(), cxenv(), cxmodel(cxenv), y(cxenv, num_vertices(in.graph)),
       w(cxenv, in.nB), cxcons(cxenv), cplex(cxenv), cb(in, stab, y, w),
-      contextMask(0) {
+      contextMask(0), mwis_env(NULL), mwis_pi(NULL), mwis_pi_scalef(1),
+      newsets(NULL), nnewsets(0), ecount(0), elist(NULL) {
   exact_init();
+  mwis_init();
 }
 
 PricingEnv::~PricingEnv() {
@@ -52,6 +56,11 @@ PricingEnv::~PricingEnv() {
   cxobj.end();
   cxmodel.end();
   cxenv.end();
+
+  // End MWIS variables
+  delete[] elist;
+  free(mwis_pi);
+  COLORstable_freeenv(&mwis_env);
 }
 
 void PricingEnv::exact_init() {
@@ -140,6 +149,226 @@ void PricingEnv::exact_init() {
     cplex.use(&cb, contextMask);
 }
 
+void PricingEnv::mwis_init() {
+
+  // Initalize stable environment
+  COLORstable_initenv(&mwis_env, NULL, 0);
+
+  // Intialize vectors of weights
+  mwis_pi = (COLORNWT *)COLOR_SAFE_MALLOC(num_vertices(in.graph), COLORNWT);
+  std::vector<double> weights(num_vertices(in.graph), 0.0);
+
+  // // Initialize maps from original vertices to positive vertices, and
+  // viceversa std::iota(toPosVertex.begin(), toPosVertex.end(), 0);
+  // std::iota(toVertex.begin(), toVertex.end(), 0);
+
+  // Initialize edge array
+  int *elist = new int[2 * num_edges(in.graph)];
+  for (auto e : boost::make_iterator_range(edges(in.graph))) {
+    elist[2 * ecount] = source(e, in.graph);
+    elist[2 * ecount++ + 1] = target(e, in.graph);
+  }
+}
+
+// std::pair<bool, size_t> PricingEnv::get_weights(std::vector<double> &weights,
+//                                                 IloNumArray &dualsA,
+//                                                 IloNumArray &dualsB) {
+//   size_t nPosWeights = 0;
+//   bool changed = false;
+//   for (auto v : boost::make_iterator_range(vertices(in.graph))) {
+//     auto [a, b] = in.graph[v];
+//     double weight = dualsA[in.tyA2idA[a]] - dualsB[in.tyB2idB[b]];
+//     if ((weight < -PRICING_EPSILON && weights[v] > -PRICING_EPSILON) ||
+//         (weight > -PRICING_EPSILON && weights[v] < -PRICING_EPSILON))
+//       changed = true;
+//     weights[v] = weight;
+//     if (weights[v] > -PRICING_EPSILON)
+//       nPosWeights++;
+//   }
+//   return std::make_pair(changed, nPosWeights);
+// }
+
+/* Adaptation of  COLOR_double2COLORNWT from exactcolors */
+int PricingEnv::double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
+                                const std::vector<double> &dbl_weights) {
+  size_t i;
+  double max_dbl_nweight = -DBL_MAX;
+  double max_prec_dbl = exp2(DBL_MANT_DIG - 1);
+  static const double max_mwiswt = (double)COLORNWT_MAX;
+  double dbl_scalef = COLORDBLmin(max_prec_dbl, max_mwiswt);
+
+  dbl_scalef /= (double)dbl_weights.size();
+
+  for (i = 0; i < dbl_weights.size(); ++i) {
+    max_dbl_nweight = COLORDBLmax(max_dbl_nweight, dbl_weights[i]);
+  }
+  dbl_scalef /= COLORDBLmax(1.0, max_dbl_nweight);
+  dbl_scalef = floor(dbl_scalef);
+  *scalef = (COLORNWT)dbl_scalef;
+
+  for (i = 0; i < dbl_weights.size(); ++i) {
+    double weight = dbl_weights[i] * dbl_scalef;
+    assert(weight < (double)COLORNWT_MAX);
+    nweights[i] = (COLORNWT)weight;
+  }
+  return 0;
+}
+
+// /* Adaptation of  COLOR_double2COLORNWT from exactcolors */
+// int LP::double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
+//                         size_t nPosWeights,
+//                         const std::vector<double> &dbl_weights) {
+//   size_t i;
+//   double max_dbl_nweight = -DBL_MAX;
+//   double max_prec_dbl = exp2(DBL_MANT_DIG - 1);
+//   static const double max_mwiswt = (double)COLORNWT_MAX;
+//   double dbl_scalef = COLORDBLmin(max_prec_dbl, max_mwiswt);
+
+//   // Compute positive dbl weights
+//   std::vector<double> dbl_PosWeights;
+//   dbl_PosWeights.reserve(nPosWeights);
+//   for (auto w : dbl_weights)
+//     if (w > -EPSILON)
+//       dbl_PosWeights.push_back(w);
+
+//   dbl_scalef /= (double)dbl_PosWeights.size();
+
+//   for (i = 0; i < dbl_PosWeights.size(); ++i) {
+//     max_dbl_nweight = COLORDBLmax(max_dbl_nweight, dbl_PosWeights[i]);
+//   }
+//   dbl_scalef /= COLORDBLmax(1.0, max_dbl_nweight);
+//   dbl_scalef = floor(dbl_scalef);
+//   *scalef = (COLORNWT)dbl_scalef;
+
+//   for (i = 0; i < dbl_PosWeights.size(); ++i) {
+//     double weight = dbl_PosWeights[i] * dbl_scalef;
+//     assert(weight < (double)COLORNWT_MAX);
+//     nweights[i] = (COLORNWT)weight;
+//   }
+//   return 0;
+// }
+
+std::pair<StableEnv, PRICING_STATE>
+PricingEnv::mwis2_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+
+  // Reset solution counter an cutoff value
+  nnewsets = 0;
+  mwis_pi_scalef = 1;
+
+  // Reset stable
+  stab.stable.clear();
+  stab.as.clear();
+  stab.bs.clear();
+  stab.cost = 0.0;
+
+  // Compute vertex weight array
+  std::vector<double> weights(num_vertices(in.graph));
+
+  // Reinitialize stable environment
+  COLORstable_freeenv(&mwis_env);
+  COLORstable_initenv(&mwis_env, NULL, 0);
+
+  // Scale weights
+  double2COLORNWT(mwis_pi, &mwis_pi_scalef, weights);
+
+  // Solve the MWIS problem
+  COLORstable_wrapper(&mwis_env, &newsets, &nnewsets, num_vertices(in.graph),
+                      ecount, elist, mwis_pi, mwis_pi_scalef, 0, 0, 2);
+
+  // Recover stable set
+  for (int set_i = 0; set_i < nnewsets; ++set_i)
+    for (int j = 0; j < newsets[set_i].count; ++j) {
+      int v = newsets[set_i].members[j];
+      stab.stable.push_back(v);
+      auto [a, b] = in.graph[v];
+      stab.as.insert(a);
+      stab.bs.insert(b);
+    }
+
+  // Free memory
+  free(newsets);
+
+  return std::make_pair(stab, PRICING_FEASIBLE);
+}
+
+// std::pair<StableEnv, PRICING_STATE> PricingEnv::mwis1_solve(IloNumArray
+// &dualsA,
+//                                                             IloNumArray
+//                                                             &dualsB, double
+//                                                             timelimit) {
+//   // Reset solution counter an cutoff value
+//   nnewsets = 0;
+//   mwis_pi_scalef = 1;
+
+//   auto [changed, nPosWeights] = get_weights(weights, duals);
+
+//   If the sign of the weight of any vertex has changed...
+//   if (changed) {
+
+//     // Reinitialize stable environment
+//     COLORstable_freeenv(&mwis_env);
+//     COLORstable_initenv(&mwis_env, NULL, 0);
+
+//     // Reindex vertices with positive weight from 0 to nPosWeights-1
+//     oldVertices.resize(nPosWeights);
+//     size_t i = 0;
+//     for (auto v : boost::make_iterator_range(vertices(graph))) {
+//       if (weights[v] > -EPSILON) {
+//         oldVertices[i] = v;
+//         newVertices[v] = i;
+//         ++i;
+//       } else
+//         newVertices[v] = -1;
+//     }
+
+//     // Recompute edge list according to the previous indices
+//     // Ignore edges that have as endpoint a vertex with a negative weight
+//     ecount = 0;
+//     for (auto e : boost::make_iterator_range(edges(graph))) {
+//       auto v = source(e, graph);
+//       auto u = target(e, graph);
+//       if (weights[v] < -EPSILON || weights[u] < -EPSILON)
+//         continue;
+//       elist[2 * ecount] = newVertices[v];
+//       elist[2 * ecount++ + 1] = newVertices[u];
+//     }
+//   }
+
+//   // Scale weights
+//   double2COLORNWT(mwis_pi, &mwis_pi_scalef, nPosWeights, weights);
+// if (ecount == 0) {
+//   // Edge-less graphs raise error in COLORstable_wrapper
+//   // So, they are manually solved
+//   nnewsets = 1;
+//   newsets = (COLORset *)malloc(sizeof(COLORset) * nnewsets);
+//   newsets[0].next = NULL;
+//   newsets[0].count = nPosWeights;
+//   newsets[0].members = (int *)malloc(sizeof(int) * newsets[0].count);
+//   for (int i = 0; i < newsets[0].count; ++i)
+//     newsets[0].members[i] = i;
+// } else
+//   // Solve the MWIS problem
+//   COLORstable_wrapper(&mwis_env, &newsets, &nnewsets, nPosWeights,
+//   ecount,
+//                       elist, mwis_pi, mwis_pi_scalef, 0, 0, 2);
+// // Add column/s
+// for (int set_i = 0; set_i < nnewsets; ++set_i) {
+//   // Translate stable set into old vertices
+//   for (int j = 0; j < newsets[set_i].count; ++j) {
+//     newsets[set_i].members[j] = oldVertices[newsets[set_i].members[j]];
+//   }
+//   newsets[set_i].age = 0;
+//   // Local copy of the translated stable set
+//   COLORset *nset = (COLORset *)malloc(sizeof(COLORset));
+//   memcpy(nset, &newsets[set_i], sizeof(COLORset));
+//   // Add column
+//   add_column(cenv, nset);
+// }
+
+// // Free memory
+// free(newsets);
+// }
+
 std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
                                                             IloNumArray &dualsB,
                                                             double timelimit) {
@@ -220,6 +449,11 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
     }
   }
 
+  // Non-optimality check
+  if (res.first.cost > 1 + EPSILON) {
+    // TODOOOOOO
+  }
+
   return std::make_pair(stab, state);
 }
 
@@ -289,6 +523,11 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::heur_solve(IloNumArray &dualsA,
         it->first = dualsA[in.tyA2idA[au]];
       ++it;
     }
+  }
+
+  // Non-optimality check
+  if (res.first.cost > 1 + EPSILON) {
+    // TODOOOOOO
   }
 
   return std::make_pair(stab, PRICING_FEASIBLE);

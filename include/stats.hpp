@@ -6,8 +6,8 @@
 #include <string>
 
 enum PRICING_STATE {
-  PRICING_OPTIMAL,
-  PRICING_FEASIBLE,
+  PRICING_SOLUTION,
+  PRICING_NO_SOLUTION,
   PRICING_TIME_EXCEEDED,
   PRICING_MEM_EXCEEDED,
   PRICING_OTHER,
@@ -51,7 +51,7 @@ struct Stats {
   Stats()
       : nvars(-1), ncons(-1), state(UNKNOWN), time(-1.0), nodes(-1),
         initSol(-1), lb(-1.0), ub(-1), gap(-1.0), poolSize(-1), ncolsPool(-1),
-        ncolsHeur(-1), ncolsExact(-1){};
+        ncolsHeur(-1), ncolsExact(-1) {};
 
   std::string get_state_as_str();
   void write_stats(std::ostream &file);

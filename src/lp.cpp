@@ -11,7 +11,7 @@
 LP::LP(const Graph &graph, Pool &_pool, Graph &origGraph, Col *initSol)
     : in(GraphEnv(graph)), stables(), posVars(), objVal(-1.0), initSol(initSol),
       pool(_pool), origGraph(origGraph), nTotalPoolCols(0), nTotalHeurCols(0),
-      nTotalExactCols(0){};
+      nTotalExactCols(0) {};
 
 LP::~LP() {
   // for (size_t i = 0; i < stables.size(); ++i) {
@@ -149,23 +149,6 @@ double get_elapsed_time(auto startTime) {
       .count();
 }
 
-// std::pair<bool, size_t> LP::get_weights(std::vector<double> &weights,
-//                                         IloNumArray &duals) {
-//   size_t nPosWeights = 0;
-//   bool changed = false;
-//   for (auto v : boost::make_iterator_range(vertices(in.graph))) {
-//     auto [a, b] = in.graph[v];
-//     double weight = duals[in.tyA2idA[a]] - duals[in.nA + in.tyB2idB[b]];
-//     if ((weight < -EPSILON && weights[v] > -EPSILON) ||
-//         (weight > -EPSILON && weights[v] < -EPSILON))
-//       changed = true;
-//     weights[v] = weight;
-//     if (weights[v] > -EPSILON)
-//       nPosWeights++;
-//   }
-//   return std::make_pair(changed, nPosWeights);
-// }
-
 // Be careful, the stab is assume to be in terms of the original graph
 // and only coincides with the current graph for the root node
 bool LP::check_stable(StableEnv &stab, IloNumArray &dualsA,
@@ -205,13 +188,6 @@ LP_STATE LP::optimize(double timelimit) {
   size_t nPoolFails = MAXFAILSPOOL;
   size_t nHeurFails = MAXFAILSHEUR;
 
-  // MWISenv *mwis_env = NULL;
-  // COLORNWT *mwis_pi = NULL;
-  // COLORNWT mwis_pi_scalef = 1;
-
-  // COLORset *newsets = NULL;
-  // int nnewsets = 0;
-
   // Check if the input is a GCP instance
   if (in.isGCP)
     return solve_GCP(timelimit);
@@ -230,33 +206,7 @@ LP_STATE LP::optimize(double timelimit) {
   // Initialize pricing environment
   PricingEnv penv(in);
 
-  // // Initalize stable environment
-  // COLORstable_initenv(&mwis_env, NULL, 0);
-
-  // // Intialize vectors of weights
-  // mwis_pi = (COLORNWT *)COLOR_SAFE_MALLOC(num_vertices(graph), COLORNWT);
-  // std::vector<double> weights(num_vertices(graph), 0.0);
-
-  // // Map from new vertices (with positive weight) to original vertices,
-  // // and viceversa
-  // std::vector<int> newVertices(num_vertices(graph));
-  // std::iota(newVertices.begin(), newVertices.end(), 0);
-  // std::vector<Vertex> oldVertices(num_vertices(graph));
-  // std::iota(oldVertices.begin(), oldVertices.end(), 0);
-
-  // // Initialize edge array
-  // int ecount = 0;
-  // int elist[2 * num_edges(graph)];
-  // for (auto e : boost::make_iterator_range(edges(graph))) {
-  //   elist[2 * ecount] = source(e, graph);
-  //   elist[2 * ecount++ + 1] = target(e, graph);
-  // }
-
   while (state == LP_UNSOLVED) {
-
-    // // Reset solution counter an cutoff value
-    // nnewsets = 0;
-    // mwis_pi_scalef = 1;
 
     // Set time limit
     double timelimit2 = timelimit - get_elapsed_time(startTime);
@@ -283,44 +233,6 @@ LP_STATE LP::optimize(double timelimit) {
     // Compute dual value array
     cplex.getDuals(dualsA, cenv.XrestrA);
     cplex.getDuals(dualsB, cenv.XrestrB);
-
-    // // Compute vertex weight array
-    // auto [changed, nPosWeights] = get_weights(weights, duals);
-
-    // // If the sign of the weight of any vertex has changed...
-    // if (changed) {
-
-    //   // Reinitialize stable environment
-    //   COLORstable_freeenv(&mwis_env);
-    //   COLORstable_initenv(&mwis_env, NULL, 0);
-
-    //   // Reindex vertices with positive weight from 0 to nPosWeights-1
-    //   oldVertices.resize(nPosWeights);
-    //   size_t i = 0;
-    //   for (auto v : boost::make_iterator_range(vertices(graph))) {
-    //     if (weights[v] > -EPSILON) {
-    //       oldVertices[i] = v;
-    //       newVertices[v] = i;
-    //       ++i;
-    //     } else
-    //       newVertices[v] = -1;
-    //   }
-
-    //   // Recompute edge list according to the previous indices
-    //   // Ignore edges that have as endpoint a vertex with a negative weight
-    //   ecount = 0;
-    //   for (auto e : boost::make_iterator_range(edges(graph))) {
-    //     auto v = source(e, graph);
-    //     auto u = target(e, graph);
-    //     if (weights[v] < -EPSILON || weights[u] < -EPSILON)
-    //       continue;
-    //     elist[2 * ecount] = newVertices[v];
-    //     elist[2 * ecount++ + 1] = newVertices[u];
-    //   }
-    // }
-
-    // // Scale weights
-    // double2COLORNWT(mwis_pi, &mwis_pi_scalef, nPosWeights, weights);
 
     // *******************************************************************
     // // Print some statics
@@ -354,39 +266,6 @@ LP_STATE LP::optimize(double timelimit) {
     // // Changed
     // std::cout << "changed: " << changed << std::endl;
     // *******************************************************************
-
-    // if (ecount == 0) {
-    //   // Edge-less graphs raise error in COLORstable_wrapper
-    //   // So, they are manually solved
-    //   nnewsets = 1;
-    //   newsets = (COLORset *)malloc(sizeof(COLORset) * nnewsets);
-    //   newsets[0].next = NULL;
-    //   newsets[0].count = nPosWeights;
-    //   newsets[0].members = (int *)malloc(sizeof(int) * newsets[0].count);
-    //   for (int i = 0; i < newsets[0].count; ++i)
-    //     newsets[0].members[i] = i;
-    // } else
-    //   // Solve the MWIS problem
-    //   COLORstable_wrapper(&mwis_env, &newsets, &nnewsets, nPosWeights,
-    //   ecount,
-    //                       elist, mwis_pi, mwis_pi_scalef, 0, 0, 2);
-
-    // // Add column/s
-    // for (int set_i = 0; set_i < nnewsets; ++set_i) {
-    //   // Translate stable set into old vertices
-    //   for (int j = 0; j < newsets[set_i].count; ++j) {
-    //     newsets[set_i].members[j] = oldVertices[newsets[set_i].members[j]];
-    //   }
-    //   newsets[set_i].age = 0;
-    //   // Local copy of the translated stable set
-    //   COLORset *nset = (COLORset *)malloc(sizeof(COLORset));
-    //   memcpy(nset, &newsets[set_i], sizeof(COLORset));
-    //   // Add column
-    //   add_column(cenv, nset);
-    // }
-
-    // // Free memory
-    // free(newsets);
 
     std::pair<StableEnv, PRICING_STATE> res;
 
@@ -433,25 +312,21 @@ LP_STATE LP::optimize(double timelimit) {
     // Third, exact resolution of pricing
     res = penv.exact_solve(dualsA, dualsB, timelimit2);
 
-    // Handle errors
-    if (res.second == PRICING_TIME_EXCEEDED) {
+    // Handle exact outputs
+    if (res.second == PRICING_SOLUTION) {
+      // std::cout << "Exact: " << res.first.cost << std::endl;
+      add_column(cenv, res.first);
+      nTotalExactCols++;
+      continue;
+    } else if (res.second == PRICING_NO_SOLUTION) {
+      break;
+    } else if (res.second == PRICING_TIME_EXCEEDED) {
       state = LP_TIME_EXCEEDED;
       break;
     } else if (res.second == PRICING_MEM_EXCEEDED) {
       state = LP_MEM_EXCEEDED;
       break;
     }
-
-    // Non-optimality check
-    if (res.first.cost > 1 + EPSILON) {
-      // std::cout << "Exact: " << res.first.cost << std::endl;
-      add_column(cenv, res.first);
-      nTotalExactCols++;
-      continue;
-    }
-
-    // Optimality proved
-    break;
   }
 
   if (state != LP_TIME_EXCEEDED && state != LP_MEM_EXCEEDED) {
@@ -495,8 +370,6 @@ LP_STATE LP::optimize(double timelimit) {
     values.end();
   }
 
-  // free(mwis_pi);
-  // COLORstable_freeenv(&mwis_env);
   cplex.end();
   return state;
 }
@@ -581,40 +454,6 @@ LP_STATE LP::solve_GCP(double timelimit) {
   COLORlp_free_env();
   return state;
 }
-
-// /* Adaptation of  COLOR_double2COLORNWT from exactcolors */
-// int LP::double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
-//                         size_t nPosWeights,
-//                         const std::vector<double> &dbl_weights) {
-//   size_t i;
-//   double max_dbl_nweight = -DBL_MAX;
-//   double max_prec_dbl = exp2(DBL_MANT_DIG - 1);
-//   static const double max_mwiswt = (double)COLORNWT_MAX;
-//   double dbl_scalef = COLORDBLmin(max_prec_dbl, max_mwiswt);
-
-//   // Compute positive dbl weights
-//   std::vector<double> dbl_PosWeights;
-//   dbl_PosWeights.reserve(nPosWeights);
-//   for (auto w : dbl_weights)
-//     if (w > -EPSILON)
-//       dbl_PosWeights.push_back(w);
-
-//   dbl_scalef /= (double)dbl_PosWeights.size();
-
-//   for (i = 0; i < dbl_PosWeights.size(); ++i) {
-//     max_dbl_nweight = COLORDBLmax(max_dbl_nweight, dbl_PosWeights[i]);
-//   }
-//   dbl_scalef /= COLORDBLmax(1.0, max_dbl_nweight);
-//   dbl_scalef = floor(dbl_scalef);
-//   *scalef = (COLORNWT)dbl_scalef;
-
-//   for (i = 0; i < dbl_PosWeights.size(); ++i) {
-//     double weight = dbl_PosWeights[i] * dbl_scalef;
-//     assert(weight < (double)COLORNWT_MAX);
-//     nweights[i] = (COLORNWT)weight;
-//   }
-//   return 0;
-// }
 
 auto find_most_fractional(std::map<Vertex, double> &m) {
   return std::max_element(m.begin(), m.end(),
