@@ -10,12 +10,16 @@ std::string Stats::get_state_as_str() {
     return "INFEASIBLE";
   case TIME_EXCEEDED:
     return "TIME_EXCEEDED";
+  case TIME_EXCEEDED_LP:
+    return "TIME_EXCEEDED_LP";
+  case TIME_EXCEEDED_PR:
+    return "TIME_EXCEEDED_PR";
   case MEM_EXCEEDED:
     return "MEM_EXCEEDED";
-  case NODE_TIME_EXCEEDED:
-    return "NODE_TIME_EXCEEDED";
-  case NODE_MEM_EXCEEDED:
-    return "NODE_MEM_EXCEEDED";
+  case MEM_EXCEEDED_LP:
+    return "MEM_EXCEEDED_LP";
+  case MEM_EXCEEDED_PR:
+    return "MEM_EXCEEDED_PR";
   default:
     return "UNKNOWN";
   }

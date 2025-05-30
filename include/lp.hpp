@@ -4,6 +4,7 @@
 #include "col.hpp"
 #include "cplex_env.hpp"
 #include "graph.hpp"
+#include "pricing.hpp"
 #include "stats.hpp"
 extern "C" {
 #include "color.h"
@@ -51,30 +52,50 @@ public:
   void branch(std::vector<LP *> &branches);
 
 private:
-  GraphEnv in;                              // Input
-  std::vector<std::vector<Vertex>> stables; // Vector of columns (stable sets)
-  std::vector<int> posVars;                 // Vector of positive variables
-  Vertex branchVar;                         // Branching variable
-  double objVal;                            // Objective value
-  Col *initSol;     // Initial solution (only for the root node)
-  Pool &pool;       // Pool of columns
-  Graph &origGraph; // Original graph
+  // Input data
+  GraphEnv in;
+  // Vector of columns (stable sets)
+  std::vector<std::vector<Vertex>> stables;
+  // Vector of positive variables
+  std::vector<int> posVars;
+  // Branching variable
+  Vertex branchVar;
+  // Objective value
+  double objVal;
+  // Initial solution (only used in the root node)
+  Col *initSol;
+  // Pool of columns
+  Pool &pool;
+  // Original graph
+  Graph &origGraph;
+  // Map from current vertices to original vertices
+  std::vector<Vertex> vertexMap;
+  // Map from original vertices to current vertices
+  std::vector<int> invVertexMap;
   size_t nTotalPoolCols;
   size_t nTotalHeurCols;
   size_t nTotalExactCols;
+  size_t nRemainingAttemptsPool;
+  size_t nRemainingAttemptsHeur;
 
   // Initialize the linear relaxation with an initial set of columns
   void add_constraints(CplexEnv &cenv);
   void add_initial_columns(CplexEnv &cenv);
 
-  // // Add a new column to the linear relaxation
-  // void add_column(CplexEnv &cenv, COLORset *newset);
-
   // Add a new column to the linear relaxation
   void add_column(CplexEnv &cenv, StableEnv &stab);
 
+  // Translate a stable set from the pool in terms of the vertices of the
+  // current graph
+  std::pair<bool, StableEnv> translate_stable_from_pool(StableEnv &stab,
+                                                        IloNumArray &dualsA,
+                                                        IloNumArray &dualsB);
+
   // Set CPLEX's parameters
   void set_parameters(CplexEnv &cenv, IloCplex &cplex);
+
+  int pricing(CplexEnv &cenv, PricingEnv &penv, IloNumArray &dualsA,
+              IloNumArray &dualsB);
 
   // // Compute vertex weights from dual values
   // // Return a boolean to indicate whether the weight of any vertex changed

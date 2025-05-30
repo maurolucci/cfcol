@@ -83,9 +83,13 @@ public:
     // Push root note (and solve initial LR)
     switch (push(root)) {
     case LP_TIME_EXCEEDED:
-      return return_stats(NODE_TIME_EXCEEDED);
+      return return_stats(TIME_EXCEEDED_LP);
+    case LP_TIME_EXCEEDED_PR:
+      return return_stats(TIME_EXCEEDED_PR);
     case LP_MEM_EXCEEDED:
-      return return_stats(NODE_MEM_EXCEEDED);
+      return return_stats(MEM_EXCEEDED_LP);
+    case LP_MEM_EXCEEDED_PR:
+      return return_stats(MEM_EXCEEDED_PR);
     default:
       break;
     }
@@ -113,10 +117,16 @@ public:
         switch (push(n)) {
         case LP_TIME_EXCEEDED:
           delete node;
-          return return_stats(NODE_TIME_EXCEEDED);
+          return return_stats(TIME_EXCEEDED_LP);
+        case LP_TIME_EXCEEDED_PR:
+          delete node;
+          return return_stats(TIME_EXCEEDED_PR);
         case LP_MEM_EXCEEDED:
           delete node;
-          return return_stats(NODE_MEM_EXCEEDED);
+          return return_stats(MEM_EXCEEDED_LP);
+        case LP_MEM_EXCEEDED_PR:
+          delete node;
+          return return_stats(MEM_EXCEEDED_PR);
         default:
           break;
         }

@@ -10,8 +10,25 @@
 
 LP::LP(const Graph &graph, Pool &_pool, Graph &origGraph, Col *initSol)
     : in(GraphEnv(graph)), stables(), posVars(), objVal(-1.0), initSol(initSol),
-      pool(_pool), origGraph(origGraph), nTotalPoolCols(0), nTotalHeurCols(0),
-      nTotalExactCols(0) {};
+      pool(_pool), origGraph(origGraph), vertexMap(), invVertexMap(),
+      nTotalPoolCols(0), nTotalHeurCols(0), nTotalExactCols(0),
+      nRemainingAttemptsPool(MAXFAILSPOOL),
+      nRemainingAttemptsHeur(MAXFAILSHEUR) {
+
+  // Translate original vertices to current vertices and viceversa
+  vertexMap.resize(num_vertices(graph));
+  invVertexMap.resize(num_vertices(origGraph), -1);
+  for (Vertex v : boost::make_iterator_range(vertices(origGraph))) {
+    auto [av, bv] = origGraph[v];
+    for (Vertex u : boost::make_iterator_range(vertices(graph))) {
+      auto [au, bu] = graph[u];
+      if (av == au && bv == bu) {
+        vertexMap[u] = v;
+        invVertexMap[v] = u;
+      }
+    }
+  }
+};
 
 LP::~LP() {
   // for (size_t i = 0; i < stables.size(); ++i) {
@@ -67,46 +84,6 @@ void LP::add_initial_columns(CplexEnv &cenv) {
   return;
 }
 
-// void LP::add_column(CplexEnv &cenv, COLORset *newset) {
-//   std::vector<bool> cA(in.nA);
-//   std::vector<bool> cB(in.nB);
-//   for (int i = 0; i < newset->count; ++i) {
-//     auto [a, b] = in.graph[newset->members[i]];
-//     cA[in.tyA2idA[a]] = true;
-//     cB[in.tyB2idB[b]] = true;
-//   }
-//   IloNumColumn column = cenv.Xobj(1.0);
-//   for (size_t i = 0; i < cA.size(); ++i)
-//     if (cA[i])
-//       column += cenv.Xrestr[i](1.0);
-//   for (size_t i = 0; i < cB.size(); ++i)
-//     if (cB[i])
-//       column += cenv.Xrestr[cA.size() + i](-1.0);
-//   cenv.Xvars.add(IloNumVar(column));
-//   stables.push_back(newset);
-
-//   // *******************************************************************
-//   // Print some statics
-//   std::cout << "adding column: [";
-//   for (size_t i = 0; i < cA.size(); ++i)
-//     if (cA[i])
-//       std::cout << " " << in.idA2TyA[i];
-//   std::cout << " ] [";
-//   for (size_t i = 0; i < cB.size(); ++i)
-//     if (cB[i])
-//       std::cout << " " << in.idB2TyB[i];
-//   std::cout << " ]" << std::endl;
-//   // *******************************************************************
-//   std::cout << "adding column: [";
-//   for (int i = 0; i < newset->count; ++i) {
-//     auto [a, b] = in.graph[newset->members[i]];
-//     std::cout << " " << newset->members[i] << " = (" << a << ", " << b <<
-//     ")";
-//   }
-//   std::cout << " ]" << std::endl;
-//   // *******************************************************************
-// }
-
 void LP::add_column(CplexEnv &cenv, StableEnv &stab) {
   IloNumColumn column = cenv.Xobj(1.0);
   for (auto a : stab.as)
@@ -149,44 +126,30 @@ double get_elapsed_time(auto startTime) {
       .count();
 }
 
-// Be careful, the stab is assume to be in terms of the original graph
-// and only coincides with the current graph for the root node
-bool LP::check_stable(StableEnv &stab, IloNumArray &dualsA,
-                      IloNumArray &dualsB) {
-
-  // Iterate over the vertices of the current graph and mark the vertices
-  // of the stable that belongs to the current graph
-  std::vector<bool> seen(stab.stable.size());
-  for (Vertex v : boost::make_iterator_range(vertices(in.graph))) {
-    for (size_t i = 0; i < stab.stable.size(); ++i) {
-      auto [a, b] = origGraph[stab.stable[i]];
-      if (in.graph[v].first == a && in.graph[v].second == b)
-        seen[i] = true;
-    }
+// Translate a stable set from the pool in terms of the vertices of the current
+// graph
+std::pair<bool, StableEnv> LP::translate_stable_from_pool(StableEnv &stab,
+                                                          IloNumArray &dualsA,
+                                                          IloNumArray &dualsB) {
+  StableEnv newStab;
+  for (Vertex v : stab.stable) {
+    auto [a, b] = origGraph[v];
+    int u = invVertexMap[v];
+    if (u < 0)
+      return std::make_pair(false, newStab);
+    newStab.stable.push_back(u);
+    if (newStab.as.insert(a).second)
+      newStab.cost += dualsA[in.tyA2idA[a]];
+    if (newStab.bs.insert(b).second)
+      newStab.cost -= dualsB[in.tyB2idB[b]];
   }
-
-  // Return if the stable is not valid for the current graph
-  for (bool b : seen)
-    if (!b)
-      return false;
-
-  // Get cost of the stable
-  double cost = 0.0;
-  for (TypeA a : stab.as)
-    cost += dualsA[in.tyA2idA[a]];
-  for (TypeB b : stab.bs)
-    cost -= dualsB[in.tyB2idB[b]];
-
-  return cost > 1 + EPSILON;
+  return std::make_pair(true, newStab);
 }
 
 LP_STATE LP::optimize(double timelimit) {
 
   auto startTime = std::chrono::high_resolution_clock::now();
   LP_STATE state = LP_UNSOLVED;
-
-  size_t nPoolFails = MAXFAILSPOOL;
-  size_t nHeurFails = MAXFAILSHEUR;
 
   // Check if the input is a GCP instance
   if (in.isGCP)
@@ -244,92 +207,23 @@ LP_STATE LP::optimize(double timelimit) {
     // for (size_t i = 0; i < in.nB; ++i)
     //   std::cout << i << "(" << in.idB2TyB[i] << "): " << dualsB[i] << " ";
     // std::cout << std::endl;
-    // // Weights
-    // std::cout << "weights: ";
-    // for (size_t i = 0; i < weights.size(); ++i)
-    //   std::cout << weights[i] << " ";
-    // std::cout << std::endl;
-    // // Positive weights
-    // std::cout << "number of positive weights: " << nPosWeights << " of "
-    //           << num_vertices(graph) << std::endl;
-    // // Scaled weights
-    // std::cout << "mwis_pi: ";
-    // for (size_t i = 0; i < nPosWeights; ++i)
-    //   std::cout << mwis_pi[i] << " ";
-    // std::cout << std::endl;
-    // std::cout << "mwis_pi_scalef: " << mwis_pi_scalef << std::endl;
-    // // Edge array
-    // std::cout << "edges: ";
-    // for (int i = 0; i < ecount; ++i)
-    //   std::cout << "(" << elist[2 * i] << "," << elist[2 * i + 1] << ") ";
-    // std::cout << std::endl;
-    // // Changed
-    // std::cout << "changed: " << changed << std::endl;
     // *******************************************************************
 
-    std::pair<StableEnv, PRICING_STATE> res;
-
-    // First, look for entering columns in the pool
-    if (nPoolFails > 0) {
-      size_t nPoolCols = 0;
-      for (StableEnv &stab : pool)
-        if (check_stable(stab, dualsA, dualsB)) {
-          add_column(cenv, stab);
-          nPoolCols++;
-          nTotalPoolCols++;
-          if (nPoolCols > MAXCOLSFROMPOOL)
-            break;
-        }
-      if (nPoolCols > 0) {
-        // std::cout << "Pool: " << nPoolCols << std::endl;
-        continue;
-      } else
-        nPoolFails--;
-    }
-
-    // Second, heuristic resolution of pricing
-    if (nHeurFails > 0) {
-      size_t nHeurCols = 0;
-      for (size_t i = 0; i < MAXCOLSFROMHEUR; ++i) {
-        // Random starting vertex for the stable set
-        Vertex v = rand_int(rng) % num_vertices(in.graph);
-        res = penv.heur_solve(dualsA, dualsB, v);
-        // Non-optimality check
-        if (res.first.cost > 1 + EPSILON) {
-          add_column(cenv, res.first);
-          nHeurCols++;
-          nTotalHeurCols++;
-        }
-      }
-      if (nHeurCols > 0) {
-        // std::cout << "Heuristic: " << nHeurCols << std::endl;
-        continue;
-      } else {
-        nHeurFails--;
-      }
-    }
-
-    // Third, exact resolution of pricing
-    res = penv.exact_solve(dualsA, dualsB, timelimit2);
-
-    // Handle exact outputs
-    if (res.second == PRICING_SOLUTION) {
-      // std::cout << "Exact: " << res.first.cost << std::endl;
-      add_column(cenv, res.first);
-      nTotalExactCols++;
+    int ret = pricing(cenv, penv, dualsA, dualsB);
+    if (ret > 0)
       continue;
-    } else if (res.second == PRICING_NO_SOLUTION) {
+    else if (ret == 0)
       break;
-    } else if (res.second == PRICING_TIME_EXCEEDED) {
-      state = LP_TIME_EXCEEDED;
+    else if (ret == -1) {
+      state = LP_TIME_EXCEEDED_PR;
       break;
-    } else if (res.second == PRICING_MEM_EXCEEDED) {
-      state = LP_MEM_EXCEEDED;
+    } else if (ret == -2) {
+      state = LP_MEM_EXCEEDED_PR;
       break;
     }
   }
 
-  if (state != LP_TIME_EXCEEDED && state != LP_MEM_EXCEEDED) {
+  if (state == LP_UNSOLVED) {
 
     // Recover primal values and objective value
     IloNumArray values = IloNumArray(cenv.Xenv, cenv.Xvars.getSize());
@@ -372,6 +266,75 @@ LP_STATE LP::optimize(double timelimit) {
 
   cplex.end();
   return state;
+}
+
+int LP::pricing(CplexEnv &cenv, PricingEnv &penv, IloNumArray &dualsA,
+                IloNumArray &dualsB) {
+
+  // First, look for entering columns in the pool
+  if (nRemainingAttemptsPool > 0) {
+    size_t nPoolCols = 0;
+    for (StableEnv &stab : pool) {
+      auto ret = translate_stable_from_pool(stab, dualsA, dualsB);
+      if (!ret.first)
+        continue;
+      if (ret.second.cost > 1 + EPSILON) {
+        add_column(cenv, ret.second);
+        nPoolCols++;
+        nTotalPoolCols++;
+        if (nPoolCols > MAXCOLSFROMPOOL)
+          break;
+      }
+    }
+    if (nPoolCols > 0) {
+      // std::cout << "** Added " << nPoolCols << " columns from pool"
+      //           << std::endl;
+      return nPoolCols;
+    } else
+      nRemainingAttemptsPool--;
+  }
+
+  std::pair<StableEnv, PRICING_STATE> res;
+
+  // Second, heuristic resolution of pricing
+  if (nRemainingAttemptsHeur > 0) {
+    size_t nHeurCols = 0;
+    for (size_t i = 0; i < MAXCOLSFROMHEUR; ++i) {
+      // Random starting vertex for the stable set
+      Vertex v = rand_int(rng) % num_vertices(in.graph);
+      res = penv.heur_solve(dualsA, dualsB, v);
+      if (res.second == PRICING_SOLUTION) {
+        add_column(cenv, res.first);
+        nHeurCols++;
+        nTotalHeurCols++;
+      }
+    }
+    if (nHeurCols > 0) {
+      // std::cout << "** Added " << nHeurCols << " columns from heuristic"
+      //           << std::endl;
+      return nHeurCols;
+    } else
+      nRemainingAttemptsHeur--;
+  }
+
+  // Third, exact resolution of pricing
+  res = penv.exact_solve(dualsA, dualsB);
+
+  // Handle exact outputs
+  if (res.second == PRICING_SOLUTION) {
+    // std::cout << "Exact: " << res.first.cost << std::endl;
+    add_column(cenv, res.first);
+    nTotalExactCols++;
+    // std::cout << "** Added a column from ILP" << std::endl;
+    return 1;
+  } else if (res.second == PRICING_NO_SOLUTION)
+    return 0;
+  else if (res.second == PRICING_TIME_EXCEEDED)
+    return -1;
+  else if (res.second == PRICING_MEM_EXCEEDED)
+    return -2;
+  else
+    return -3;
 }
 
 /* Solve a graph coloring problem instance with exactcolors */
@@ -517,11 +480,11 @@ size_t LP::get_branching_variable(const IloNumArray &values) {
 
   // *******************************************************************
   // // Print some statics
-  // std::cout << "branching variable: " << best_v << " [" <<
-  // graph[best_v].first
-  //           << " " << graph[best_v].second << "] with size "
-  //           << posSnd[tyA2idA[graph[best_v].first]].size() << " and value "
-  //           << best_value << std::endl
+  // std::cout << "branching variable: " << best_v << " ["
+  //           << in.graph[best_v].first << " " << in.graph[best_v].second
+  //           << "] with size "
+  //           << posSnd[in.tyA2idA[in.graph[best_v].first]].size()
+  //           << " and value " << best_value << std::endl
   //           << std::endl;
   // *******************************************************************
 
@@ -535,11 +498,11 @@ void LP::save_solution(Col &col) {
     for (auto v : stables[i]) {
       // auto [a, b] = in.graph[v];
       // col.set_color(a, b, k);
-      col.set_color(v, k);
+      col.set_color(vertexMap[v], k);
     }
     ++k;
   }
-  assert(col.check_coloring(in.graph));
+  assert(col.check_coloring(origGraph));
   return;
 }
 

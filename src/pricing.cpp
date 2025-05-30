@@ -253,7 +253,7 @@ PricingEnv::mwis2_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 
   // Reset solution counter an cutoff value
   nnewsets = 0;
-  mwis_pi_scalef = 1;
+  mwis_pi_scalef = 10; // high cutoff to force optimality
 
   // Reset stable
   stab.stable.clear();
@@ -282,13 +282,21 @@ PricingEnv::mwis2_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
       stab.stable.push_back(v);
       auto [a, b] = in.graph[v];
       stab.as.insert(a);
-      stab.bs.insert(b);
+      stab.cost += dualsA[in.tyA2idA[a]];
+      if (stab.bs.insert(b).second)
+        stab.cost -= dualsB[in.tyB2idB[b]];
     }
 
   // Free memory
   free(newsets);
 
-  return std::make_pair(stab, PRICING_FEASIBLE);
+  PRICING_STATE state;
+  if (stab.cost > 1 + PRICING_EPSILON)
+    state = PRICING_SOLUTION;
+  else
+    state = PRICING_NO_SOLUTION;
+
+  return std::make_pair(stab, state);
 }
 
 // std::pair<StableEnv, PRICING_STATE> PricingEnv::mwis1_solve(IloNumArray
@@ -369,9 +377,8 @@ PricingEnv::mwis2_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 // free(newsets);
 // }
 
-std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
-                                                            IloNumArray &dualsB,
-                                                            double timelimit) {
+std::pair<StableEnv, PRICING_STATE>
+PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 
   // Update objective coefficients
   IloNumArray y_coefs(cxenv, num_vertices(in.graph));
@@ -388,35 +395,19 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
   stab.stable.clear();
   stab.as.clear();
   stab.bs.clear();
+  stab.cost = 0.0;
 
   // Solve
   cplex.extract(cxmodel);
-  cplex.setParam(IloCplex::Param::TimeLimit, timelimit);
+  cplex.setParam(IloCplex::Param::TimeLimit, PRICING_TIMELIMIT);
   cplex.solve();
 
   // Get final state
   PRICING_STATE state;
   switch (cplex.getCplexStatus()) {
-  case IloCplex::CplexStatus::Optimal:
-    state = PRICING_OPTIMAL;
-    break;
-  case IloCplex::CplexStatus::AbortUser:
-    state = PRICING_FEASIBLE;
-    break;
-  case IloCplex::CplexStatus::AbortTimeLim:
-    state = PRICING_TIME_EXCEEDED;
-    break;
-  case IloCplex::CplexStatus::MemLimFeas:
-  case IloCplex::CplexStatus::MemLimInfeas:
-    state = PRICING_MEM_EXCEEDED;
-    break;
-  default:
-    state = PRICING_OTHER;
-    break;
-  }
-
-  // Recover solution
-  if (state == PRICING_OPTIMAL) {
+  case IloCplex::CplexStatus::Optimal: {
+    // Exit witout abortion means that the optimal value is <= THRESHOLD = 1.1
+    // Recover optimal solution
     IloNumArray valY(cxenv, num_vertices(in.graph));
     cplex.getValues(y, valY);
     IloNumArray valW(cxenv, in.nB);
@@ -430,8 +421,16 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
       if (valW[iB] > 0.5)
         stab.bs.insert(in.idB2TyB[iB]);
     stab.cost = cplex.getBestObjValue();
-  } else if (state == PRICING_FEASIBLE) {
-    // Maximalize stable
+    // Classify optimal solution
+    if (stab.cost > 1 + PRICING_EPSILON)
+      state = PRICING_SOLUTION;
+    else
+      state = PRICING_NO_SOLUTION;
+  } break;
+  case IloCplex::CplexStatus::AbortUser:
+    // Exit with abortion means that the current value is > THRESHOLD = 1.1
+    state = PRICING_SOLUTION;
+    // Try to improve the stable set
     for (Vertex v : boost::make_iterator_range(vertices(in.graph))) {
       auto [a, b] = in.graph[v];
       if (dualsA[in.tyA2idA[a]] < PRICING_EPSILON || stab.as.contains(a))
@@ -447,11 +446,17 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(IloNumArray &dualsA,
       stab.as.insert(a);
       stab.cost += dualsA[in.tyA2idA[a]];
     }
-  }
-
-  // Non-optimality check
-  if (res.first.cost > 1 + EPSILON) {
-    // TODOOOOOO
+    break;
+  case IloCplex::CplexStatus::AbortTimeLim:
+    state = PRICING_TIME_EXCEEDED;
+    break;
+  case IloCplex::CplexStatus::MemLimFeas:
+  case IloCplex::CplexStatus::MemLimInfeas:
+    state = PRICING_MEM_EXCEEDED;
+    break;
+  default:
+    state = PRICING_OTHER;
+    break;
   }
 
   return std::make_pair(stab, state);
@@ -525,10 +530,11 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::heur_solve(IloNumArray &dualsA,
     }
   }
 
-  // Non-optimality check
-  if (res.first.cost > 1 + EPSILON) {
-    // TODOOOOOO
-  }
+  PRICING_STATE state;
+  if (stab.cost > 1 + PRICING_EPSILON)
+    state = PRICING_SOLUTION;
+  else
+    state = PRICING_NO_SOLUTION;
 
-  return std::make_pair(stab, PRICING_FEASIBLE);
+  return std::make_pair(stab, state);
 }
