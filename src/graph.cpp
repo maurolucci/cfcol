@@ -126,10 +126,10 @@ void GraphEnv::preprocess_step2() {
     // Pop from queue
     size_t id_a = queue.front();
     queue.pop_front();
-    auto v = snd[id_a].front();
+    auto v = snd[id_a].front(); // |V_a| = 1
     auto b = graph[v].second;
     // Remove neighbors of v with common b
-    auto [it_u, it_end] = vertices(graph);
+    auto [it_u, it_end] = adjacent_vertices(v, graph);
     for (auto next = it_u; it_u != it_end; it_u = next) {
       ++next;
       TypeA au = graph[*it_u].first;
