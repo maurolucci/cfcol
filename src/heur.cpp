@@ -7,128 +7,234 @@ extern "C" {
 
 #include <chrono>
 #include <limits>
+#include <queue>
 #include <random>
 
 using ClockType = std::chrono::high_resolution_clock;
 using TimePoint = std::chrono::_V2::system_clock::time_point;
 
-class CustomComparator {
-public:
-  CustomComparator(const GraphEnv &genv, const std::vector<bool> &state,
-                   const std::vector<int> &nV)
-      : genv(genv), state(state), nV(nV) {}
+// Vertex information
+struct Heur1SVertexInfo {
+  Color color;               // color of the vertex
+  std::set<Color> adjColors; // adjacent colors
+  int nreprs;                // -|V_a|
+  int nincomp;               // -|N(v) \cap V^b|
+  bool removed;              // whether the vertex has been removed
+  size_t id;
 
-  size_t degree(Vertex v) const {
-    size_t ret = 0;
-    for (Vertex w :
-         boost::make_iterator_range(adjacent_vertices(v, genv.graph)))
-      if (state[genv.getId.at(v)])
-        ret++;
-    return ret;
+  // Constructor
+  Heur1SVertexInfo(const GraphEnv &genv, const Vertex &u)
+      : color(-1), adjColors(), nincomp(0), removed(false) {
+    TypeA a = genv.graph[u].first;
+    TypeB b = genv.graph[u].second;
+    nreprs = -genv.Va.at(a).size();
+    for (Vertex v :
+         boost::make_iterator_range(adjacent_vertices(u, genv.graph)))
+      if (b == genv.graph[v].second)
+        nincomp--;
+    id = genv.getId.at(u);
   }
 
-  Vertex select() {
-    auto x = std::min_element(vertices(genv.graph).first,
-                              vertices(genv.graph).second);
-    return *x;
+  void print_info() {
+    std::cout << "id: " << id << ", color: " << color << ", adjColors: [";
+    for (Color i : adjColors)
+      std::cout << i << ",";
+    std::cout << "], nreprs: " << -nreprs << ", nincomp: " << -nincomp
+              << ", removed: " << removed << std::endl;
   }
-
-  bool operator()(Vertex v, Vertex u) const {
-
-    // Get the a component of each vertex
-    TypeA av = genv.graph[v].first, au = genv.graph[u].first;
-
-    // First criterion: smallest |Va|
-    if (nV[genv.tyA2idA.at(av)] < nV[genv.tyA2idA.at(au)])
-      return true;
-    else if (nV[genv.tyA2idA.at(av)] > nV[genv.tyA2idA.at(au)])
-      return false;
-
-    // Second criterion: smallest |N(w)|
-    size_t degreev = degree(v);
-    size_t degreeu = degree(u);
-    return degreev <= degreeu;
-  }
-
-private:
-  const GraphEnv &genv;
-  const std::vector<bool> &state;
-  const std::vector<int> &nV;
 };
 
-Vertex select_vertex(const GraphEnv &genv, const std::vector<bool> &state) {}
+// Function to find a free color in the the neighborhood of a vertex
+Color get_free_color(const Graph &graph, const Vertex u,
+                     const std::map<Vertex, Heur1SVertexInfo> &info,
+                     std::vector<bool> &used) {
+
+  // Mark the colors used in the neighborhood of u
+  for (Vertex v : boost::make_iterator_range(adjacent_vertices(u, graph)))
+    if (info.at(v).color != -1)
+      used[info.at(v).color] = true;
+
+  // Find the first available color for u
+  Color i;
+  for (i = 0; i < static_cast<int>(used.size()); i++)
+    if (used[i] == false)
+      break;
+
+  // Unmark the colors used in the neighborhood of u
+  for (Vertex v : boost::make_iterator_range(adjacent_vertices(u, graph)))
+    if (info.at(v).color != -1)
+      used[info.at(v).color] = false;
+
+  return i;
+}
 
 // One-step heuristic for DPCP
-void dpcp_heur_1_step(const GraphEnv &genv, Col &col, VertexSelector getVertex,
-                      StableSetConstructor buildStab) {
+// Based on a DSATUR implementation for GCP that runs in O((n + m) log n)
+Stats dpcp_heur_1_step(const GraphEnv &genv, Col &col) {
 
-  // Map from vertex to state. Possible states are:
-  //  * false: unavailable (colored or removed)
-  //  * true: available (uncolored)
-  std::vector<bool> state(num_vertices(genv.graph), true);
+  TimePoint start = ClockType::now();
 
-  // First color
-  Color k = 0;
+  // Map with the necessary information of each vertex
+  std::map<Vertex, Heur1SVertexInfo> info;
 
-  // Map from a to the cardinality of V_a
-  std::vector<size_t> nV(genv.nA);
-  for (size_t iA = 0; iA < genv.nA; ++iA)
-    nV[iA] = genv.snd[iA].size();
+  // Comparison function between two vertices
+  // First: the greatest number of adjacent colors
+  // Second: the lowest size of |V_a|
+  // Third: the lowest size of |N(v) \cap V^b|
+  // Fourth: the greatest index
+  auto cmp = [&info](const Vertex &u, const Vertex &v) {
+    return std::tie(info.at(u).adjColors, info.at(u).nreprs, info.at(u).nincomp,
+                    info.at(u).id) >
+           std::tie(info.at(v).adjColors, info.at(v).nreprs, info.at(v).nincomp,
+                    info.at(v).id);
+  };
 
-  // Number of vertices to finish
-  size_t n_rest = genv.nA;
+  // Priority queue with the candidate vertices
+  std::set<Vertex, decltype(cmp)> pqueue(cmp);
 
-  while (n_rest > 0) {
+  // Fill the information of the vertices and add them to the queue
+  for (Vertex u : boost::make_iterator_range(vertices(genv.graph))) {
+    info.emplace(u, Heur1SVertexInfo(genv, u));
+    pqueue.insert(u);
+  }
 
-    // Chose a vertex
-    Vertex v = getVertex(genv, state);
+  // Auxiliary vector that helps to decide the color of a vertex. In fact,
+  // used[k] tells whether the color k is used in the neighborhood of the
+  // current vertex
+  std::vector<bool> used(std::min(genv.nA, genv.nB), false);
 
-    // Build an stable set containing v
-    VertexVector stable = buildStab(genv, state, v);
+  // Local variables
+  size_t ret;
 
-    // Iterate over the vertices of the stable set
-    for (Vertex u : stable) {
+  while (!pqueue.empty()) {
+    // Choose the next vertex
+    Vertex u = *pqueue.begin();
+    pqueue.erase(pqueue.begin());
+    // info.at(u).print_info();
 
-      // Color u with k
-      col.set_color(genv.graph, u, k);
+    // Get components (a,b) of u
+    TypeA a = genv.graph[u].first;
+    TypeB b = genv.graph[u].second;
 
-      // Get the a and b components of u
-      TypeA a = genv.graph[u].first;
-      TypeB b = genv.graph[u].second;
+    // Decide the color of u
+    Color i;
+    if (col.is_colored_B(b)) {
+      // All colored vertices in V^b must have the same color
+      i = col.get_color_B(b);
+    } else {
+      // Get a non-adjacent color
+      i = get_free_color(genv.graph, u, info, used);
+    }
 
-      // Remove vertices of Va
-      for (Vertex w : genv.snd.at(genv.tyA2idA.at(a)))
-        state[genv.getId.at(w)] = false;
-      nV[genv.tyA2idA.at(a)] = std::numeric_limits<size_t>::max();
-      n_rest--;
+    // Color u with i
+    // std::cout << "Pintando: (" << genv.graph[u].first << ","
+    //           << genv.graph[u].second << ") con " << i << std::endl;
+    info.at(u).color = i;
+    col.set_color(genv.graph, u, i);
 
-      // Iterate over the neighbors of u
-      for (Vertex w :
-           boost::make_iterator_range(adjacent_vertices(u, genv.graph))) {
+    // Set of vertices that must be removed after coloring u
+    std::set<Vertex> toRemove;
 
-        // Remove w if it also has b
-        if (!state[genv.getId.at(w)] || genv.graph[w].second != b)
-          continue;
-        state[genv.getId.at(w)] = false;
+    for (Vertex v :
+         boost::make_iterator_range(adjacent_vertices(u, genv.graph))) {
 
-        // Get the a component of w
-        TypeA aw = genv.graph[w].first;
+      // Ignore removed or colored neighbors
+      if (info.at(v).removed || info.at(v).color != -1)
+        continue;
 
-        // If aw has no more candidates, report failure
-        nV[genv.tyA2idA.at(aw)]--;
-        if (nV[genv.tyA2idA.at(aw)] > 0)
-          continue;
-        col.reset_coloring();
-        return;
+      // Get components (a,b) of v
+      TypeA av = genv.graph[v].first;
+      TypeB bv = genv.graph[v].second;
+
+      // If v in V_a or v in V^b, remove v
+      if (a == av || b == bv)
+        toRemove.insert(v);
+
+      // Otherwise, add the new adjacent color
+      // This forces a reallocation in the priority queue
+      else {
+        if (col.is_colored_B(bv) && i == col.get_color_B(bv))
+          toRemove.insert(v);
+        else {
+          // std::cout << "Realocando: (" << genv.graph[v].first << ","
+          //           << genv.graph[v].second << ")" << std::endl;
+          pqueue.erase(v);
+          info.at(v).adjColors.insert(i);
+          pqueue.insert(v);
+        }
       }
     }
 
-    // Next color
-    ++k;
+    // Also, the vertices in V^b that has i as an adjacent color should be
+    // removed
+    for (auto v : genv.Vb.at(b))
+      if (!info.at(v).removed && info.at(v).color == -1 &&
+          info.at(v).adjColors.contains(i))
+        toRemove.insert(v);
+
+    // Remove vertices and update their neighbors
+    for (auto v : toRemove) {
+
+      info.at(v).removed = true;
+      ret = pqueue.erase(v);
+      assert(ret > 0);
+      // std::cout << "Borrando: (" << genv.graph[v].first << ","
+      //           << genv.graph[v].second << ")" << std::endl;
+
+      // Get components (a,b) of v
+      TypeA av = genv.graph[v].first;
+      TypeB bv = genv.graph[v].second;
+
+      // If v not in V_a, update every vertex in V_av,
+      // as the size of V_av has changed
+      // This forces a reallocation in the priority queue
+      if (av != a) {
+        size_t count = 0;
+        for (auto w : genv.Va.at(av)) {
+          if (info.at(w).removed)
+            continue;
+          // std::cout << "Realocando: (" << genv.graph[w].first << ","
+          //           << genv.graph[w].second << ")" << std::endl;
+          count++;
+          pqueue.erase(w);
+          info.at(w).nreprs++;
+          pqueue.insert(w);
+        }
+        if (count == 0) {
+          TimePoint end = ClockType::now();
+          Stats stats;
+          stats.state = INFEASIBLE;
+          stats.time = std::chrono::duration<double>(end - start).count();
+          return stats;
+        }
+      }
+
+      // Update every neighbor w of v such that w in V^bv,
+      // as v has been removed
+      // This forces a reallocation in the priority queue
+      for (auto w :
+           boost::make_iterator_range(adjacent_vertices(v, genv.graph)))
+        if (genv.graph[w].second == bv && !info.at(w).removed &&
+            info.at(w).color == -1) {
+          // std::cout << "Realocando: (" << genv.graph[w].first << ","
+          //           << genv.graph[w].second << ")" << std::endl;
+          pqueue.erase(w);
+          info.at(w).nincomp++;
+          pqueue.insert(w);
+        }
+    }
   }
 
   assert(col.check_coloring(genv.graph));
-  return;
+
+  TimePoint end = ClockType::now();
+
+  Stats stats;
+  stats.state = FEASIBLE;
+  stats.time = std::chrono::duration<double>(end - start).count();
+  stats.ub = static_cast<double>(col.get_n_colors());
+
+  return stats;
 }
 
 bool is_conflict(const GraphEnv &genv, Vertex v, Vertex u) {

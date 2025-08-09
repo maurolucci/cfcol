@@ -224,17 +224,22 @@ void GraphEnv::init_graphenv() {
     if (retA) {
       idA2TyA.push_back(a);
       snd.push_back(std::vector<Vertex>{v});
+      Va.emplace(a, std::vector<Vertex>{v});
       nA++;
     } else {
       snd[tyA2idA[a]].push_back(v);
+      Va[a].push_back(v);
       isGCP = false;
     }
     if (retB) {
       idB2TyB.push_back(b);
       fst.push_back(std::vector<Vertex>{v});
+      Vb.emplace(b, std::vector<Vertex>{v});
       nB++;
-    } else
+    } else {
       fst[tyB2idB[b]].push_back(v);
+      Vb[b].push_back(v);
+    }
   }
 }
 

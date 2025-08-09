@@ -30,7 +30,9 @@ public:
     return colorB.contains(b);
   };
 
-  [[nodiscard]] inline bool get_color_B(TypeB b) const { return colorB.at(b); };
+  [[nodiscard]] inline Color get_color_B(TypeB b) const {
+    return colorB.at(b);
+  };
 
   void reset_coloring();
 

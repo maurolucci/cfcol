@@ -53,30 +53,42 @@ int main() {
 
     std::cout << std::endl << SEPBAR << std::endl << std::endl;
 
-    // Solve with heuristic and fill the pool of columns
+    // Solve with one-step heuristic
     GraphEnv genv(graph, params);
-    Col dsaturCol;
-    Pool pool;
-    std::cout << "Running heuristic..." << std::endl;
-    Stats stats0 = heur_solve(genv, genv.idA2TyA, dsaturCol, 100, pool);
-    std::cout << "Time: " << stats0.time << std::endl;
-    std::cout << "Value: " << stats0.ub << std::endl;
+    Col col1s;
+    std::cout << "Running one-step heuristic for DPCP..." << std::endl;
+    Stats stats1s = dpcp_heur_1_step(genv, col1s);
+    std::cout << "Time: " << stats1s.time << std::endl;
+    if (stats1s.state == FEASIBLE)
+      std::cout << "Value: " << stats1s.ub << std::endl;
+    else
+      std::cout << "Value: No solution found :(" << std::endl;
 
     std::cout << std::endl << SEPBAR << std::endl << std::endl;
 
-    // Solve with branch and price
-    std::cout << "Running B&P..." << std::endl;
-    // Copy the original graph
-    Graph gcopy = graph_copy(graph);
-    // Now, execute B&P
-    LP *lp = new LP(gcopy, params, pool, graph, &dsaturCol, true);
-    Node *root = new Node(lp);
-    Col col;
-    BP<Col> bp(col, std::cout, false);
-    bp.set_initial_solution(dsaturCol, dsaturCol.get_n_colors());
-    Stats stats1 = bp.solve(root);
-    stats1.poolSize = pool.size();
-    stats1.print_stats(std::cout);
+    // Solve with two-step heuristic and fill the pool of columns
+    Col col2s;
+    Pool pool;
+    std::cout << "Running two-step heuristic for DPCP..." << std::endl;
+    Stats stats2s = heur_solve(genv, genv.idA2TyA, col2s, 100, pool);
+    std::cout << "Time: " << stats2s.time << std::endl;
+    std::cout << "Value: " << stats2s.ub << std::endl;
+
+    // std::cout << std::endl << SEPBAR << std::endl << std::endl;
+
+    // // Solve with branch and price
+    // std::cout << "Running B&P..." << std::endl;
+    // // Copy the original graph
+    // Graph gcopy = graph_copy(graph);
+    // // Now, execute B&P
+    // LP *lp = new LP(gcopy, params, pool, graph, &col2s, true);
+    // Node *root = new Node(lp);
+    // Col col;
+    // BP<Col> bp(col, std::cout, false);
+    // bp.set_initial_solution(col2s, col2s.get_n_colors());
+    // Stats stats1 = bp.solve(root);
+    // stats1.poolSize = pool.size();
+    // stats1.print_stats(std::cout);
 
     // std::cout << std::endl << SEPBAR << std::endl << std::endl;
 

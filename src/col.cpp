@@ -18,8 +18,9 @@ void Col::set_color(const Graph &graph, const Vertex v, const Color k) {
   if (colorB.contains(b))
     // Al the vertices of V^b must have the same color
     assert(colorB[b] == k);
-  else
+  else {
     colorB[b] = k;
+  }
 }
 
 bool Col::check_coloring(const Graph &graph) const {
@@ -42,8 +43,10 @@ bool Col::check_coloring(const Graph &graph) const {
     auto v = target(e, graph);
     if (coloring.contains(u) && coloring.contains(v) &&
         coloring.at(u) == coloring.at(v)) {
-      std::cout << "Coloring error #3: " << u << " and " << v
-                << " are adjecent and both have color " << coloring.at(u)
+      std::cout << "Coloring error #3: " << u << " (" << graph[u].first << ","
+                << graph[u].second << ") and " << v << " (" << graph[v].first
+                << "," << graph[v].second
+                << ") are adjecent and both have color " << coloring.at(u)
                 << std::endl;
       return false;
     }
