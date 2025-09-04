@@ -53,11 +53,11 @@ int main() {
 
     std::cout << std::endl << SEPBAR << std::endl << std::endl;
 
-    // Solve with one-step heuristic
+    // Solve with two-step heuristic
     GraphEnv genv(graph, params);
     Col col1s;
-    std::cout << "Running one-step heuristic for DPCP..." << std::endl;
-    Stats stats1s = dpcp_heur_1_step(genv, col1s);
+    std::cout << "1. Running two-step heuristic for DPCP..." << std::endl;
+    Stats stats1s = dpcp_2_step_greedy_heur_min_degree_in_Vb(genv, col1s);
     std::cout << "Time: " << stats1s.time << std::endl;
     if (stats1s.state == FEASIBLE)
       std::cout << "Value: " << stats1s.ub << std::endl;
@@ -66,13 +66,50 @@ int main() {
 
     std::cout << std::endl << SEPBAR << std::endl << std::endl;
 
-    // Solve with two-step heuristic and fill the pool of columns
+    // Solve with two-step heuristic
     Col col2s;
-    Pool pool;
-    std::cout << "Running two-step heuristic for DPCP..." << std::endl;
-    Stats stats2s = heur_solve(genv, genv.idA2TyA, col2s, 100, pool);
+    std::cout << "2. Running two-step heuristic for DPCP..." << std::endl;
+    Stats stats2s = dpcp_2_step_greedy_heur_min_degree_in_B(genv, col2s);
     std::cout << "Time: " << stats2s.time << std::endl;
-    std::cout << "Value: " << stats2s.ub << std::endl;
+    if (stats2s.state == FEASIBLE)
+      std::cout << "Value: " << stats2s.ub << std::endl;
+    else
+      std::cout << "Value: No solution found :(" << std::endl;
+
+    std::cout << std::endl << SEPBAR << std::endl << std::endl;
+
+    // Solve with two-step heuristic
+    Col col3s;
+    std::cout << "3. Running two-step heuristic for DPCP..." << std::endl;
+    Stats stats3s =
+        dpcp_2_step_greedy_heur_min_degree_in_selected_B(genv, col3s);
+    std::cout << "Time: " << stats3s.time << std::endl;
+    if (stats3s.state == FEASIBLE)
+      std::cout << "Value: " << stats3s.ub << std::endl;
+    else
+      std::cout << "Value: No solution found :(" << std::endl;
+
+    std::cout << std::endl << SEPBAR << std::endl << std::endl;
+
+    // Solve with two-step heuristic
+    Col col4s;
+    std::cout << "4. Running two-step heuristic for DPCP..." << std::endl;
+    Stats stats4s = dpcp_2_step_greedy_heur_min_n_new_edges(genv, col4s);
+    std::cout << "Time: " << stats4s.time << std::endl;
+    if (stats4s.state == FEASIBLE)
+      std::cout << "Value: " << stats4s.ub << std::endl;
+    else
+      std::cout << "Value: No solution found :(" << std::endl;
+
+    std::cout << std::endl << SEPBAR << std::endl << std::endl;
+
+    // Solve with two-step heuristic and fill the pool of columns
+    Col col5s;
+    Pool pool;
+    std::cout << "5. Running two-step heuristic for DPCP..." << std::endl;
+    Stats stats5s = heur_solve(genv, genv.idA2TyA, col5s, 1, pool);
+    std::cout << "Time: " << stats5s.time << std::endl;
+    std::cout << "Value: " << stats5s.ub << std::endl;
 
     // std::cout << std::endl << SEPBAR << std::endl << std::endl;
 
