@@ -516,13 +516,10 @@ vertex_color_selector(const GraphEnv &genv, Col &col, const InfoMap &info,
   // Iterate over the candidate vertices
   for (Vertex u : vCandidates) {
 
-    TypeA a = genv.graph[u].first;
-    TypeB b = genv.graph[u].second;
-
     // Find candidate colors for u
     std::vector<Color> colors;
-    if (col.is_colored_B(b))
-      colors.push_back(col.get_color_B(b));
+    if (col.is_colored_B(genv.graph[u].second))
+      colors.push_back(col.get_color_B(genv.graph[u].second));
     else {
       // A new color is needed? Ignore!
       if (info.at(u).adjColors.size() == col.get_n_colors())
@@ -621,23 +618,17 @@ Stats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
       stats.time = std::chrono::duration<double>(end - start).count();
       return stats;
     }
-
     Vertex u = std::get<0>(tuple);
     Color i = std::get<1>(tuple);
-    VertexSet inv = std::get<2>(tuple);
-
-    // Get components (a,b) of u
-    TypeA a = genv.graph[u].first;
-    TypeB b = genv.graph[u].second;
+    VertexSet &inv = std::get<2>(tuple);
 
     // Color u with i
-    // std::cout << "Pintando: (" << genv.graph[u].first << ","
-    //           << genv.graph[u].second << ") con " << i << std::endl;
     info.at(u).color = i;
     col.set_color(genv.graph, u, i);
+    // info.at(u).print_info();
 
     // Invalidate the remaining vertices of Va
-    for (Vertex v : genv.Va.at(a))
+    for (Vertex v : genv.Va.at(genv.graph[u].first))
       if (v != u && !info.at(v).removed)
         inv.insert(v);
 
@@ -648,8 +639,7 @@ Stats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
     // Remove vertices and update information
     for (Vertex v : inv) {
       info.at(v).removed = true;
-      TypeA av = info.at(v).a;
-      nVa.at(av)--;
+      nVa.at(info.at(v).a)--;
       for (Vertex w : info.at(v).uncolNeighbors)
         info.at(w).uncolNeighbors.erase(v);
     }
