@@ -63,10 +63,15 @@ private:
   Pool &pool;
   // Original graph
   Graph &origGraph;
+  // Whether a dummy column was used to initialize the LP
+  bool initializedWithDummy;
+
   // // Map from current vertices to original vertices
   // std::vector<Vertex> vertexMap;
   // // Map from original vertices to current vertices
   // std::vector<int> invVertexMap;
+
+  void solve_heur_aux(Stats &stats, int heur, int iters);
 
   // Initialize the linear relaxation with an initial set of columns
   void add_constraints_and_objective(CplexEnv &cenv);

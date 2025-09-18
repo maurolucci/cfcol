@@ -24,6 +24,7 @@ enum LP_STATE {
   LP_TIME_EXCEEDED_PR,
   LP_MEM_EXCEEDED,
   LP_MEM_EXCEEDED_PR,
+  LP_INIT_FAIL,
 };
 
 enum STATE {
@@ -36,6 +37,7 @@ enum STATE {
   MEM_EXCEEDED,
   MEM_EXCEEDED_LP,
   MEM_EXCEEDED_PR,
+  INIT_FAIL,
   UNKNOWN,
 };
 
@@ -59,17 +61,24 @@ public:
   int nColsMwis1;
   int nColsMwis2;
   int nColsExact;
+  int nCallsPool;
   int nCallsHeur;
   int nCallsMWis1;
   int nCallsMWis2;
   int nCallsExact;
+  double nTimePool;
+  double nTimeHeur;
+  double nTimeMwis1;
+  double nTimeMwis2;
+  double nTimeExact;
 
   Stats()
       : nvars(-1), ncons(-1), state(UNKNOWN), time(-1.0), nodes(-1),
         initSol(-1), initSolTime(-1.0), rootval(-1.0), lb(-1.0), ub(-1),
         gap(-1.0), poolSize(-1), nColsPool(0), nColsHeur(0), nColsMwis1(0),
-        nColsMwis2(0), nColsExact(0), nCallsHeur(0), nCallsMWis1(0),
-        nCallsMWis2(0), nCallsExact(0){};
+        nColsMwis2(0), nColsExact(0), nCallsPool(0), nCallsHeur(0),
+        nCallsMWis1(0), nCallsMWis2(0), nCallsExact(0), nTimePool(0.0),
+        nTimeHeur(0.0), nTimeMwis1(0.0), nTimeMwis2(0.0), nTimeExact(0.0) {}
 
   std::string get_state_as_str();
   void write_stats(std::ostream &file);

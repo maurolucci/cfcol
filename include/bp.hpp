@@ -87,6 +87,8 @@ public:
       return return_stats(MEM_EXCEEDED_LP);
     case LP_MEM_EXCEEDED_PR:
       return return_stats(MEM_EXCEEDED_PR);
+    case LP_INIT_FAIL:
+      return return_stats(INIT_FAIL);
     default:
       break;
     }
@@ -125,6 +127,9 @@ public:
           case LP_MEM_EXCEEDED_PR:
             delete node;
             return return_stats(MEM_EXCEEDED_PR);
+          case LP_INIT_FAIL:
+            delete node;
+            return return_stats(INIT_FAIL);
           default:
             break;
           }

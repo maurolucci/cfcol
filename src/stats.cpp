@@ -20,6 +20,8 @@ std::string Stats::get_state_as_str() {
     return "MEM_EXCEEDED_LP";
   case MEM_EXCEEDED_PR:
     return "MEM_EXCEEDED_PR";
+  case INIT_FAIL:
+    return "INIT_FAIL";
   default:
     return "UNKNOWN";
   }
@@ -31,7 +33,9 @@ void Stats::write_stats(std::ostream &file) {
        << "," << lb << "," << ub << "," << gap << "," << poolSize << ","
        << nCallsHeur << "," << nCallsMWis1 << "," << nCallsMWis2 << ","
        << nCallsExact << "," << nColsPool << "," << nColsHeur << ","
-       << nColsMwis1 << "," << nColsMwis2 << "," << nColsExact << std::endl;
+       << nColsMwis1 << "," << nColsMwis2 << "," << nColsExact << ","
+       << nTimePool << "," << nTimeHeur << "," << nTimeMwis1 << ","
+       << nTimeMwis2 << "," << nTimeExact << std::endl;
 }
 
 void Stats::print_stats(std::ostream &file) {
@@ -50,15 +54,18 @@ void Stats::print_stats(std::ostream &file) {
   file << "Upper bound: " << ub << std::endl;
   file << "Gap: " << gap << std::endl;
   file << "Size of pool: " << poolSize << std::endl;
-  file << "Number of calls to:" << std::endl;
-  file << "\tGreedy Heuristic: " << nCallsHeur << std::endl;
-  file << "\tMWSSP I: " << nCallsMWis1 << std::endl;
-  file << "\tMWSSP II: " << nCallsMWis2 << std::endl;
-  file << "\tExact: " << nCallsExact << std::endl;
-  file << "Number of columns from:" << std::endl;
-  file << "\tPool: " << nColsPool << std::endl;
-  file << "\tGreedy heuristic: " << nColsHeur << std::endl;
-  file << "\tMWSSP I: " << nColsMwis1 << std::endl;
-  file << "\tMWSSP II: " << nColsMwis2 << std::endl;
-  file << "\tExact: " << nColsExact << std::endl;
+  file << "Pricing (calls, cols, time):" << std::endl;
+  file << "\tPool: " << nCallsPool << ", " << nColsPool << ", " << nTimePool
+       << std::endl;
+  file << "\tGreedy Heuristic: " << nCallsHeur << ", " << nColsHeur << ", "
+       << nTimeHeur << std::endl;
+  file << "\tMWSSP I: " << nCallsMWis1 << ", " << nColsMwis1 << ", "
+       << nTimeMwis1 << std::endl;
+  file << "\tMWSSP II: " << nCallsMWis2 << ", " << nColsMwis2 << ", "
+       << nTimeMwis2 << std::endl;
+  file << "\tExact: " << nCallsExact << ", " << nColsExact << ", " << nTimeExact
+       << std::endl;
+  file << "\tTotal time: "
+       << nTimePool + nTimeHeur + nTimeMwis1 + nTimeMwis2 + nTimeExact
+       << std::endl;
 }

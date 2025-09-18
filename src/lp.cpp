@@ -10,8 +10,8 @@
 LP::LP(const Graph &graph, Params &params, Pool &pool, Graph &origGraph,
        bool isRoot)
     : in(GraphEnv(graph, params, isRoot)), params(params), stables(), posVars(),
-      objVal(-1.0), initSol(), pool(pool),
-      origGraph(origGraph){
+      objVal(-1.0), initSol(), pool(pool), origGraph(origGraph),
+      initializedWithDummy(false){
 
           // // Translate original vertices to current vertices and viceversa
           // vertexMap.resize(num_vertices(graph));
@@ -93,6 +93,7 @@ void LP::add_initial_columns(CplexEnv &cenv) {
       z += cenv.XrestrB[i](0.0);
     cenv.Xvars.add(IloNumVar(z));
     stables.push_back(VertexVector()); // Push a null column
+    initializedWithDummy = true;
   }
 
   return;
@@ -240,13 +241,30 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
     // std::cout << "Columnas exactas: " << nExactColsTotal << std::endl;
     // *******************************************************************
 
-    // Check if dummy column is not in the basis
-    // We assume that the dummy column is the first one added
-    if (values[0] < EPSILON) {
+    // Initial variable
+    int i = 0;
 
-      // Integrality check
+    // Check if dummy column was used
+    if (initializedWithDummy) {
+      i = 1; // Skip dummy variable in the next loop
+      // If dummy column is in the basis and the objective value is greater
+      // than W, then the instance is infeasible
+      if (values[0] > EPSILON && objVal > std::min(in.nA, in.nB) + EPSILON)
+        state = LP_INFEASIBLE;
+      // Otherwise, the initialization failed
+      else if (values[0] > EPSILON) {
+        std::cout << "Initialization failed" << std::endl;
+        std::cout << "Dummy variable in basis with value " << values[0]
+                  << " and objective value " << objVal
+                  << " <= " << std::min(in.nA, in.nB) + EPSILON << std::endl;
+        state = LP_INIT_FAIL;
+      }
+    }
+
+    // Integrality check
+    if (state == LP_UNSOLVED) {
       state = LP_INTEGER;
-      for (int i = 0; i < cenv.Xvars.getSize(); ++i) {
+      for (; i < cenv.Xvars.getSize(); ++i) {
         if (values[i] < EPSILON)
           continue;
         else if (values[i] < 1 - EPSILON)
@@ -260,15 +278,7 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
       } else if (state == LP_INTEGER)
         objVal = posVars.size();
     }
-    // If the dummy columns is in the basis and the objective value is greater
-    // than W, then the instance is infeasible
-    else if (objVal > std::min(in.nA, in.nB) + EPSILON)
-      state = LP_INFEASIBLE;
-    // Otherwise, the initialization failed
-    else {
-      std::cout << "Initialization failed" << std::endl;
-      abort();
-    }
+
     values.end();
   }
 
@@ -280,7 +290,9 @@ int LP::pricing_pool(CplexEnv &cenv, Stats &stats, IloNumArray &dualsA,
                      IloNumArray &dualsB) {
   if (!params.usePool)
     return 0;
+  auto startTime = std::chrono::high_resolution_clock::now();
   size_t nPoolCols = 0;
+  stats.nCallsPool++;
   for (StableEnv &stab : pool) {
     auto ret = translate_stable_from_pool(stab, dualsA, dualsB);
     // Can the stable set be used in the current graph?
@@ -295,6 +307,9 @@ int LP::pricing_pool(CplexEnv &cenv, Stats &stats, IloNumArray &dualsA,
       //   break;
     }
   }
+  stats.nTimePool += std::chrono::duration<double>(
+                         std::chrono::high_resolution_clock::now() - startTime)
+                         .count();
   return nPoolCols;
 }
 
@@ -302,6 +317,7 @@ int LP::pricing_greedy(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
                        IloNumArray &dualsA, IloNumArray &dualsB) {
   if (!params.pricingHeur1)
     return 0;
+  auto startTime = std::chrono::high_resolution_clock::now();
   size_t nHeurCols = 0;
   for (size_t i = 0; i < params.pricingHeur1MaxNCols; ++i) {
     auto res = penv.heur_solve(dualsA, dualsB);
@@ -312,6 +328,9 @@ int LP::pricing_greedy(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
       stats.nColsHeur++;
     }
   }
+  stats.nTimeHeur += std::chrono::duration<double>(
+                         std::chrono::high_resolution_clock::now() - startTime)
+                         .count();
   return nHeurCols;
 }
 
@@ -320,6 +339,7 @@ int LP::pricing_mwss1(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
                       IloNumArray &dualsA, IloNumArray &dualsB) {
   if (!params.pricingHeur2)
     return 0;
+  auto startTime = std::chrono::high_resolution_clock::now();
   size_t nMwis1Cols = 0;
   auto res = penv.mwis1_solve(dualsA, dualsB);
   stats.nCallsMWis1++;
@@ -330,6 +350,9 @@ int LP::pricing_mwss1(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
       stats.nColsMwis1++;
     }
   }
+  stats.nTimeMwis1 += std::chrono::duration<double>(
+                          std::chrono::high_resolution_clock::now() - startTime)
+                          .count();
   return nMwis1Cols;
 }
 
@@ -338,36 +361,47 @@ int LP::pricing_mwss2(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
                       IloNumArray &dualsA, IloNumArray &dualsB) {
   if (!params.pricingHeur3)
     return 0;
+  int ret;
+  auto startTime = std::chrono::high_resolution_clock::now();
   auto res = penv.mwis2_solve(dualsA, dualsB);
   stats.nCallsMWis2++;
   if (res.second == PRICING_STABLE_FOUND) {
     add_column(cenv, res.first);
     stats.nColsMwis2++;
-    return 1;
+    ret = 1;
   } else if (res.second == PRICING_STABLE_NOT_FOUND)
-    return -1;
+    ret = -1;
   else
-    return 0; // Node solved up to optimality
+    ret = 0; // Node solved up to optimality
+  stats.nTimeMwis2 += std::chrono::duration<double>(
+                          std::chrono::high_resolution_clock::now() - startTime)
+                          .count();
+  return ret;
 }
 
 int LP::pricing_exact(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
                       IloNumArray &dualsA, IloNumArray &dualsB) {
+  auto startTime = std::chrono::high_resolution_clock::now();
+  int ret;
   auto res = penv.exact_solve(dualsA, dualsB);
   stats.nCallsExact++;
-
   // Handle exact outputs
   if (res.second == PRICING_STABLE_FOUND) {
     add_column(cenv, res.first);
     stats.nColsExact++;
-    return 1;
+    ret = 1;
   } else if (res.second == PRICING_STABLE_NOT_EXIST)
-    return 0;
+    ret = 0;
   else if (res.second == PRICING_TIME_EXCEEDED)
-    return -1;
+    ret = -1;
   else if (res.second == PRICING_MEM_EXCEEDED)
-    return -2;
+    ret = -2;
   else
-    return -3;
+    ret = -3;
+  stats.nTimeExact += std::chrono::duration<double>(
+                          std::chrono::high_resolution_clock::now() - startTime)
+                          .count();
+  return ret;
 }
 
 int LP::pricing(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
@@ -385,15 +419,27 @@ int LP::pricing(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
   if (addedCols > 0)
     return addedCols;
 
-  // Third, MWSSP heuristic I
-  addedCols = pricing_mwss1(cenv, penv, stats, dualsA, dualsB);
-  if (addedCols > 0)
-    return addedCols;
+  if (params.pricingOrder == 1) {
+    // Third, MWSSP heuristic I
+    addedCols = pricing_mwss1(cenv, penv, stats, dualsA, dualsB);
+    if (addedCols > 0)
+      return addedCols;
 
-  // Fourth, MWSSP heuristic II
-  addedCols = pricing_mwss2(cenv, penv, stats, dualsA, dualsB);
-  if (addedCols >= 0)
-    return addedCols;
+    // Fourth, MWSSP heuristic II
+    addedCols = pricing_mwss2(cenv, penv, stats, dualsA, dualsB);
+    if (addedCols >= 0)
+      return addedCols;
+  } else {
+    // Fourth, MWSSP heuristic II
+    addedCols = pricing_mwss2(cenv, penv, stats, dualsA, dualsB);
+    if (addedCols >= 0)
+      return addedCols;
+
+    // Third, MWSSP heuristic I
+    addedCols = pricing_mwss1(cenv, penv, stats, dualsA, dualsB);
+    if (addedCols > 0)
+      return addedCols;
+  }
 
   // Fifth, exact resolution of pricing
   return pricing_exact(cenv, penv, stats, dualsA, dualsB);
@@ -553,14 +599,29 @@ Vertex LP::get_branching_variable(const IloNumArray &values) {
   return best_v;
 }
 
+void LP::solve_heur_aux(Stats &stats, int heur, int iters) {
+  if (heur == 1)
+    stats = dpcp_1_step_greedy_heur(in, initSol);
+  else if (heur == 2)
+    stats = dpcp_1_step_semigreedy_heur(in, initSol, iters);
+  else if (heur == 3)
+    stats = dpcp_2_step_greedy_heur(in, initSol);
+  else if (heur == 4)
+    stats = dpcp_2_step_semigreedy_heur(in, initSol, iters);
+  return;
+}
+
 bool LP::solve_heur(double &obj_value, double &time, bool isRoot) {
-  if (!params.initializationUseHeur)
+  if (isRoot && params.heuristicRootNode == 0)
+    return false;
+  if (!isRoot && params.heuristicOtherNodes == 0)
     return false;
   Stats stats;
   if (isRoot)
-    stats = dpcp_2_step_semigreedy_heur(in, initSol, 100);
+    solve_heur_aux(stats, params.heuristicRootNode, params.heuristicRootIter);
   else
-    stats = dpcp_2_step_greedy_heur(in, initSol);
+    solve_heur_aux(stats, params.heuristicOtherNodes,
+                   params.heuristicOtherIter);
   time = stats.time;
   if (stats.state == FEASIBLE) {
     obj_value = initSol.get_n_colors();

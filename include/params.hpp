@@ -11,11 +11,29 @@ struct Params {
   size_t timeLimit;
   bool dfs;
   bool onlyRelaxation;
+  // Heuristic options
+  // heuristicRootNode: type of heuristic for the root node
+  //    0: no heuristic
+  //    1: greedy 1-step heuristic
+  //    2: semi-greedy 1-step heuristic
+  //    3: greedy 2-step heuristic
+  //    4: semi-greedy 2-step heuristic
+  // heuristicRootIter: number of iterations for semi-greedy heuristic
+  // heuristicOtherNodes: type of heuristic for other nodes
+  //    0: no heuristic
+  //    1: greedy 1-step heuristic
+  //    2: semi-greedy 1-step heuristic
+  //    3: greedy 2-step heuristic
+  //    4: semi-greedy 2-step heuristic
+  // heuristicOtherIter: number of iterations for semi-greedy heuristic
+  int heuristicRootNode;
+  size_t heuristicRootIter;
+  int heuristicOtherNodes;
+  size_t heuristicOtherIter;
   // Initialization options
   // initializationBigWeight: weight of dummy column during initialization
   // initializationUseHeur: use heuristic to find an initial solution
   double initializationBigWeight;
-  bool initializationUseHeur;
   // Preprocessing options
   // preprocStep1: make each V_a a clique
   // preprocStep2: remove vertices for each a with |V_a| = 1
@@ -41,12 +59,12 @@ struct Params {
   size_t pricingHeur1MaxNCols;
   size_t pricingExactTimeLimit;
   Params()
-      : timeLimit(900), dfs(false), onlyRelaxation(false),
-        initializationBigWeight(1000.0), initializationUseHeur(false),
-        preprocStep1(true), preprocStep2(true), preprocStep3(true),
-        usePool(false), pricingHeur1(true), pricingHeur2(true),
-        pricingHeur3(true), pricingOrder(1), pricingHeur1MaxNCols(1),
-        pricingExactTimeLimit(300){};
+      : timeLimit(900), dfs(false), onlyRelaxation(false), heuristicRootNode(4),
+        heuristicRootIter(100), heuristicOtherNodes(3), heuristicOtherIter(50),
+        initializationBigWeight(1000.0), preprocStep1(true), preprocStep2(true),
+        preprocStep3(true), usePool(false), pricingHeur1(true),
+        pricingHeur2(true), pricingHeur3(true), pricingOrder(1),
+        pricingHeur1MaxNCols(1), pricingExactTimeLimit(300){};
 };
 
 #endif // _PARAMS_HPP_
