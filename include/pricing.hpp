@@ -43,6 +43,9 @@ public:
   ~ThresholdCallback(){};
 };
 
+int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
+                    const std::vector<double> &dbl_weights);
+
 class PricingEnv {
 
 private:
@@ -75,9 +78,6 @@ private:
   // std::pair<bool, size_t> get_weights(std::vector<double> &weights,
   //                                    IloNumArray &dualsA, IloNumArray
   //                                    &dualsB);
-
-  int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
-                      const std::vector<double> &dbl_weights);
 
 public:
   PricingEnv(GraphEnv &in, double exactTimeLimit);

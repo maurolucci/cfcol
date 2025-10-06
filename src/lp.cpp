@@ -7,11 +7,12 @@
 #include <limits>
 #include <numeric>
 
-LP::LP(const Graph &graph, Params &params, Pool &pool, Graph &origGraph,
+LP::LP(Graph *graph, Params &params, Pool &pool, Graph &origGraph,
        std::ostream &log, bool isRoot)
-    : in(GraphEnv(graph, params, isRoot)), params(params), stables(), posVars(),
-      objVal(-1.0), initSol(), pool(pool), origGraph(origGraph),
-      initializedWithDummy(false),
+    : in(GraphEnv(graph, params.preprocStep1, params.preprocStep2,
+                  params.preprocStep3, isRoot)),
+      params(params), stables(), posVars(), objVal(-1.0), initSol(), pool(pool),
+      origGraph(origGraph), initializedWithDummy(false),
       log(log){
 
           // // Translate original vertices to current vertices and viceversa
@@ -29,7 +30,10 @@ LP::LP(const Graph &graph, Params &params, Pool &pool, Graph &origGraph,
           // }
       };
 
-LP::~LP() {}
+LP::~LP() {
+  if (in.graphPtr != NULL)
+    delete in.graphPtr;
+}
 
 // Add constraints
 void LP::add_constraints_and_objective(CplexEnv &cenv) {
@@ -302,8 +306,10 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
       << ", Heur: " << (stats.nColsHeur - nHeurColsTotal)
       << ", MWIS I: " << (stats.nColsMwis1 - nMwis1ColsTotal)
       << ", MWIS II: " << (stats.nColsMwis2 - nMwis2ColsTotal)
-      << ", Exact: " << (stats.nColsExact - nExactColsTotal)
-      << ", Time: " << get_elapsed_time(startTime)
+      << ", Exact: " << (stats.nColsExact - nExactColsTotal) << ", Time: "
+      << std::chrono::duration<double>(
+             std::chrono::high_resolution_clock::now() - startTime)
+             .count()
       << ", Obj: " << cplex.getObjValue() << "\n";
 
   cplex.end();
@@ -692,9 +698,10 @@ void LP::branch(std::vector<LP *> &branches) {
   // *******
 
   // Create a copy of the graph
-  Graph gcopy = graph_copy(in.graph, in.getId);
-  Vertex branchVarCopy = vertex(in.getId[branchVar], gcopy);
-  vertex_branching1(gcopy, branchVarCopy);
+  Graph *gcopy = new Graph;
+  graph_copy(in.graph, in.getId, *gcopy);
+  Vertex branchVarCopy = vertex(in.getId[branchVar], *gcopy);
+  vertex_branching1(*gcopy, branchVarCopy);
 
   // *******
   // ** Right branch: v is uncolored
@@ -709,7 +716,9 @@ void LP::branch(std::vector<LP *> &branches) {
 
   branches.resize(2);
   branches[0] = new LP(gcopy, params, pool, origGraph, log);
-  branches[1] = new LP(in.graph, params, pool, origGraph, log);
+  branches[1] = new LP(in.graphPtr, params, pool, origGraph, log);
+
+  in.graphPtr = NULL; // Avoid double free
 
   // for (auto v : boost::make_iterator_range(vertices(graph1)))
   //   std::cout << v << ": (" << graph1[v].first << "," << graph1[v].second

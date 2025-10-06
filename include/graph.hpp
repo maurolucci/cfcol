@@ -41,8 +41,9 @@ void get_conflict_graph(const HGraph &src, Graph &dst);
 void get_gcp_graph(Graph &src, GCPGraph &dst, std::map<TypeB, size_t> &tyB2idB,
                    std::vector<TypeB> &idB2TyB);
 
-Graph graph_copy(const Graph &src, const std::map<Vertex, size_t> &getId);
-Graph graph_copy(const Graph &src);
+void graph_copy(const Graph &src, const std::map<Vertex, size_t> &getId,
+                Graph &dst);
+void graph_copy(const Graph &src, Graph &dst);
 
 void vertex_branching1(Graph &graph, Vertex v);
 void vertex_branching2(Graph &graph, Vertex v);
@@ -50,8 +51,8 @@ void vertex_branching2(Graph &graph, Vertex v);
 class GraphEnv {
 
 public:
-  Graph graph;                    // Graph G = (V,E) with V c AxB
-  const Params &params;           // Parameters
+  Graph *graphPtr;                // Graph G = (V,E) with V c AxB
+  Graph &graph;                   // Graph G = (V,E) with V c AxB
   std::map<Vertex, size_t> getId; // Map from V to {0,..,|V|-1}
   size_t nA, nB;                  // |A| and |B|
 
@@ -70,8 +71,8 @@ public:
   bool isInfeasible;              // Is the instance infeasible?
   std::list<VertexInfo> isolated; // List of isolated vertices
 
-  GraphEnv(const Graph &graph, const Params &param, bool isRoot = false);
-  GraphEnv(const Graph &&graph, const Params &param, bool isRoot = false);
+  GraphEnv(Graph *graph, bool preprocess1 = true, bool preprocess2 = true,
+           bool preprocess3 = true, bool isRoot = false);
   ~GraphEnv();
 
 private:
@@ -79,7 +80,7 @@ private:
   void init_graphenv();
 
   // Preprocessing
-  void preprocess();
+  void preprocess(bool preprocess1, bool preprocess2, bool preprocess3);
   void init_preprocess();
   void preprocess_step1();
   void preprocess_step2();

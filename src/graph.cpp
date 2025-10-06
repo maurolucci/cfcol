@@ -107,19 +107,18 @@ void get_gcp_graph(Graph &src, GCPGraph &dst, std::map<TypeB, size_t> &tyB2idB,
   }
 }
 
-Graph graph_copy(const Graph &src, const std::map<Vertex, size_t> &getId) {
-  Graph dst;
+void graph_copy(const Graph &src, const std::map<Vertex, size_t> &getId,
+                Graph &dst) {
   boost::copy_graph(
       src, dst, boost::vertex_index_map(boost::make_assoc_property_map(getId)));
-  return dst;
 }
 
-Graph graph_copy(const Graph &src) {
+void graph_copy(const Graph &src, Graph &dst) {
   // boost::copy_graph needs a map from Vertex to size_t
   std::map<Vertex, size_t> index;
   for (auto v : boost::make_iterator_range(vertices(src)))
     index.insert(std::make_pair(v, index.size()));
-  return graph_copy(src, index);
+  graph_copy(src, index, dst);
 }
 
 // Vertex branching: v is colored
@@ -144,26 +143,25 @@ void vertex_branching2(Graph &graph, Vertex v) {
   remove_vertex(v, graph);
 }
 
-GraphEnv::GraphEnv(const Graph &graph, const Params &params, bool isRoot)
-    : GraphEnv(Graph{graph}, params, isRoot){};
-
-GraphEnv::GraphEnv(const Graph &&graph, const Params &params, bool isRoot)
-    : graph(graph), params(params), getId(), nA(0), nB(0), tyA2idA(), tyB2idB(),
-      idA2TyA(), idB2TyB(), snd(), fst(), isRoot(isRoot), isGCP(true),
-      isInfeasible(false), isolated() {
-  preprocess();
+GraphEnv::GraphEnv(Graph *graph, bool preprocess1, bool preprocess2,
+                   bool preprocess3, bool isRoot)
+    : graphPtr(graph), graph(*graph), getId(), nA(0), nB(0), tyA2idA(),
+      tyB2idB(), idA2TyA(), idB2TyB(), snd(), fst(), isRoot(isRoot),
+      isGCP(true), isInfeasible(false), isolated() {
+  preprocess(preprocess1, preprocess2, preprocess3);
   init_graphenv();
 };
 
 GraphEnv::~GraphEnv(){};
 
-void GraphEnv::preprocess() {
+void GraphEnv::preprocess(bool preprocess1, bool preprocess2,
+                          bool preprocess3) {
   init_preprocess();
-  if (params.preprocStep1 && isRoot)
+  if (preprocess1 && isRoot)
     preprocess_step1();
-  if (params.preprocStep2)
+  if (preprocess2)
     preprocess_step2();
-  if (params.preprocStep3)
+  if (preprocess3)
     preprocess_step3();
 }
 
@@ -235,8 +233,9 @@ void GraphEnv::preprocess_step2() {
           return;
         }
         // Then, remove the vertex from the graph
-        clear_vertex(*it_u, graph);
-        remove_vertex(*it_u, graph);
+        auto vu = *it_u;
+        clear_vertex(vu, graph);
+        remove_vertex(vu, graph);
       }
     }
   }

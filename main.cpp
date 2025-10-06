@@ -1,6 +1,7 @@
 #include "bp.hpp"
 #include "col.hpp"
 #include "compact_ilp.hpp"
+#include "feas.hpp"
 #include "graph.hpp"
 #include "lp.hpp"
 #include "params.hpp"
@@ -213,7 +214,8 @@ int main(int argc, const char **argv) {
       Col col;
       if (solver == "byp") {
         out.logFile << "Solving instance " << path << " with B&P" << std::endl;
-        Graph gcopy = graph_copy(graph);
+        Graph *gcopy = new Graph;
+        graph_copy(graph, *gcopy);
         Pool pool;
         LP *lp = new LP(gcopy, params, pool, graph, out.colFile, true);
         Node *root = new Node(lp);
@@ -224,8 +226,8 @@ int main(int argc, const char **argv) {
                     << std::endl;
         stats = solve_ilp(graph, params, out.logFile, col);
       } else if (solver == "feasibility") {
-        std::cerr << "Feasibility solver is not implemented yet" << std::endl;
-        return 2;
+        out.logFile << "Deciding feasibility of instance " << path << std::endl;
+        stats = dpcp_decide_feasibility(graph);
       } else {
         std::cerr << "Unknown solver: " << solver << std::endl;
         return 2;

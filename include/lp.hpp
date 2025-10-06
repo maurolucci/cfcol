@@ -23,7 +23,7 @@ using Column = VertexVector;
 class LP {
 
 public:
-  LP(const Graph &graph, Params &params, Pool &pool, Graph &origGraph,
+  LP(Graph *graph, Params &params, Pool &pool, Graph &origGraph,
      std::ostream &log, bool isRoot = false);
   ~LP();
 

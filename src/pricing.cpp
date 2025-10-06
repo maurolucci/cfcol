@@ -166,8 +166,8 @@ void PricingEnv::mwis_init() {
 }
 
 /* Adaptation of  COLOR_double2COLORNWT from exactcolors */
-int PricingEnv::double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
-                                const std::vector<double> &dbl_weights) {
+int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
+                    const std::vector<double> &dbl_weights) {
 
   size_t i;
   double max_dbl_nweight = -DBL_MAX;
@@ -300,6 +300,8 @@ PricingEnv::mwis1_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   }
 
   // Free memory
+  for (int i = 0; i < nnewsets; ++i)
+    free(newsets[i].members);
   free(newsets);
   free(elist2);
   free(mwis_pi2);
@@ -353,6 +355,8 @@ PricingEnv::mwis2_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   }
 
   // Free memory
+  for (int i = 0; i < nnewsets; ++i)
+    free(newsets[i].members);
   free(newsets);
 
   // Classify stable set

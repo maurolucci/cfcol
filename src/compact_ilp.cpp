@@ -9,14 +9,14 @@
 #include <ilcplex/cplex.h>
 #include <ilcplex/ilocplex.h>
 
-Stats solve_ilp(const Graph &graph, const Params &params, std::ostream &log,
+Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
                 Col &col) {
 
   Stats stats;
 
   // Try to find an initial coloring with the heuristic
   Col initialCol;
-  GraphEnv genv(graph, params, true);
+  GraphEnv genv(&graph, false, false, false, true);
   if (params.heuristicRootNode == 1)
     stats = dpcp_1_step_greedy_heur(genv, initialCol);
   else if (params.heuristicRootNode == 2)
@@ -195,6 +195,17 @@ Stats solve_ilp(const Graph &graph, const Params &params, std::ostream &log,
     stats.ub = static_cast<int>(cplex.getObjValue() + 0.5);
     stats.gap = cplex.getMIPRelativeGap();
   }
+
+  // Free memory
+  fobj.end();
+  cxcons.end();
+  for (size_t v = 0; v < num_vertices(graph); ++v)
+    x[v].end();
+  x.end();
+  w.end();
+  cplex.end();
+  cxmodel.end();
+  cxenv.end();
 
   return stats;
 }

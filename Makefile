@@ -47,53 +47,15 @@ lp.o: src/lp.cpp include/lp.hpp include/col.hpp include/cplex_env.hpp \
 include/graph.hpp include/stats.hpp include/params.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
 
+feas.o: src/feas.cpp include/graph.hpp include/stats.hpp include/pricing.hpp
+	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
+
 main.o: main.cpp include/bp.hpp include/lp.hpp include/graph.hpp \
-include/col.hpp include/compact_ilp.hpp include/stats.hpp
+include/col.hpp include/compact_ilp.hpp include/stats.hpp include/params.hpp \
+include/feas.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS) $(BOOSTLIB)
 
-# tests.o: tests.cpp include/bp.hpp include/lp.hpp include/graph.hpp \
-# include/col.hpp include/compact_ilp.hpp include/stats.hpp include/params.hpp \
-# include/pricing.hpp include/heur.hpp
-# 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
-
-# tests2.o: tests2.cpp include/bp.hpp include/lp.hpp include/graph.hpp \
-# include/col.hpp include/compact_ilp.hpp include/stats.hpp include/params.hpp \
-# include/pricing.hpp include/heur.hpp
-# 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
-
-# tests_lp.o: tests.cpp include/bp.hpp include/lp.hpp include/graph.hpp \
-# include/col.hpp include/compact_ilp.hpp include/stats.hpp \
-# include/pricing.hpp include/heur.hpp
-# 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS) -DONLY_RELAXATION
-
-# run_tests: tests.o lp.o col.o compact_ilp.o graph.o stats.o pricing.o heur.o\
-# exactcolors/color.o exactcolors/color_version.h exactcolors/util.o \
-# exactcolors/rounding_mode.o exactcolors/cliq_enum.o exactcolors/color_parms.o \
-# exactcolors/graph.o exactcolors/lpcplex.o exactcolors/bbsafe.o \
-# exactcolors/mwis_grdy.o exactcolors/heap.o \
-# exactcolors/mwis.o exactcolors/mwis_sewell/mwss_ext.o \
-# exactcolors/mwis_sewell/wstable.o exactcolors/color_backup.o exactcolors/greedy.o
-# 	$(CC) -o $@ $^ $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
-
-# run_tests2: tests2.o lp.o col.o compact_ilp.o graph.o stats.o pricing.o heur.o\
-# exactcolors/color.o exactcolors/color_version.h exactcolors/util.o \
-# exactcolors/rounding_mode.o exactcolors/cliq_enum.o exactcolors/color_parms.o \
-# exactcolors/graph.o exactcolors/lpcplex.o exactcolors/bbsafe.o \
-# exactcolors/mwis_grdy.o exactcolors/heap.o \
-# exactcolors/mwis.o exactcolors/mwis_sewell/mwss_ext.o \
-# exactcolors/mwis_sewell/wstable.o exactcolors/color_backup.o exactcolors/greedy.o
-# 	$(CC) -o $@ $^ $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
-
-# run_tests_lp: tests_lp.o lp.o col.o compact_ilp.o graph.o stats.o pricing.o heur.o\
-# exactcolors/color.o exactcolors/color_version.h exactcolors/util.o \
-# exactcolors/rounding_mode.o exactcolors/cliq_enum.o exactcolors/color_parms.o \
-# exactcolors/graph.o exactcolors/lpcplex.o exactcolors/bbsafe.o \
-# exactcolors/mwis_grdy.o exactcolors/heap.o \
-# exactcolors/mwis.o exactcolors/mwis_sewell/mwss_ext.o \
-# exactcolors/mwis_sewell/wstable.o exactcolors/color_backup.o exactcolors/greedy.o
-# 	$(CC) -o $@ $^ $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
-
-dpcp: main.o lp.o col.o compact_ilp.o graph.o stats.o pricing.o heur.o\
+dpcp: main.o lp.o col.o compact_ilp.o graph.o stats.o pricing.o heur.o feas.o \
 exactcolors/color.o exactcolors/color_version.h exactcolors/util.o \
 exactcolors/rounding_mode.o exactcolors/cliq_enum.o exactcolors/color_parms.o \
 exactcolors/graph.o exactcolors/lpcplex.o exactcolors/bbsafe.o \
