@@ -146,7 +146,7 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
 
   // Check if the instance is infeasible
   if (in.isInfeasible) {
-    log << "# infeasible instance detected" << std::endl;
+    log << "# infeasible instance detected during preprocessing" << std::endl;
     stats.ninfeas++;
     return LP_INFEASIBLE;
   }
@@ -267,8 +267,10 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
       i = 1; // Skip dummy variable in the next loop
       // If dummy column is in the basis and the objective value is greater
       // than W, then the instance is infeasible
-      if (values[0] > EPSILON && objVal > std::min(in.nA, in.nB) + EPSILON)
+      if (values[0] > EPSILON && objVal > std::min(in.nA, in.nB) + EPSILON) {
+        log << "# infeasible instance detected after pricing" << std::endl;
         state = LP_INFEASIBLE;
+      }
       // Otherwise, the initialization failed
       else if (values[0] > EPSILON) {
         std::cout << "Initialization failed" << std::endl;

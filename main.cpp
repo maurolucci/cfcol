@@ -44,7 +44,7 @@ int main(int argc, const char **argv) {
   desc.add_options()("help,h", "show this help");
   desc.add_options()("solver,s", po::value<std::string>()->required(),
                      "solver, can be any of "
-                     "[byp, compact, feasibility]");
+                     "[byp, compact, feas-enum, feas-ilp]");
   desc.add_options()(
       "graph,f",
       po::value<std::vector<std::string>>()->required()->multitoken(),
@@ -225,9 +225,14 @@ int main(int argc, const char **argv) {
         out.logFile << "Solving instance " << path << " with compact ILP"
                     << std::endl;
         stats = solve_ilp(graph, params, out.logFile, col);
-      } else if (solver == "feasibility") {
-        out.logFile << "Deciding feasibility of instance " << path << std::endl;
-        stats = dpcp_decide_feasibility(graph);
+      } else if (solver == "feas-enum") {
+        out.logFile << "Deciding feasibility of instance " << path
+                    << " with enumerative method" << std::endl;
+        stats = dpcp_decide_feasibility_enumerative(graph, params, out.logFile);
+      } else if (solver == "feas-ilp") {
+        out.logFile << "Deciding feasibility of instance " << path
+                    << " with ILP" << std::endl;
+        stats = dpcp_decide_feasibility_ilp(graph, params, out.logFile);
       } else {
         std::cerr << "Unknown solver: " << solver << std::endl;
         return 2;
