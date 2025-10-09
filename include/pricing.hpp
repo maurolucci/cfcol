@@ -33,7 +33,7 @@ public:
                     IloNumVarArray &w)
       : in(in), stab(stab), y(y), w(w){};
 
-  inline void check_thresolhd(const IloCplex::Callback::Context &context);
+  inline void check_threshold(const IloCplex::Callback::Context &context);
 
   // This is the function that we have to implement and that CPLEX will call
   // during the solution process at the places that we asked for.

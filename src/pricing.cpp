@@ -5,7 +5,7 @@
 
 // Generic callback: abort when the threshold is exceeded.
 // Implementation of early stop.
-void ThresholdCallback::check_thresolhd(
+void ThresholdCallback::check_threshold(
     const IloCplex::Callback::Context &context) {
   if (context.isCandidatePoint())
     if (context.getCandidateObjective() > THRESHOLD) {
@@ -35,7 +35,7 @@ void ThresholdCallback::check_thresolhd(
 // the solution process at the places that we asked for.
 void ThresholdCallback::invoke(const IloCplex::Callback::Context &context) {
   if (context.inCandidate())
-    check_thresolhd(context);
+    check_threshold(context);
 }
 
 PricingEnv::PricingEnv(GraphEnv &in, double exactTimeLimit)
