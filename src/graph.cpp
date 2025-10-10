@@ -52,7 +52,7 @@ std::tuple<Graph, size_t, size_t> read_dpcp_instance(std::istream &graph,
   return std::make_tuple(g, nA, nB);
 }
 
-void read_hypergrah(HGraph &hg, std::istream &input) {
+void read_hypergraph(HGraph &hg, std::istream &input) {
 
   size_t n, m, mm, v;
   input >> n >> m;

@@ -36,12 +36,11 @@ public:
     return state;
   }
 
+  bool feas_sol() const { return lp->has_feas_sol(); }
+  size_t feas_value() const { return lp->get_feas_value(); }
+
   template <class Solution> void save(Solution &sol) {
     lp->save_lp_solution(sol);
-  }
-
-  bool heuristic(double &obj_value, double &time, bool isRoot) {
-    return lp->solve_heur(obj_value, time, isRoot);
   }
 
   template <class Solution> void save_heur(Solution &sol) {
@@ -69,7 +68,7 @@ template <class Solution> class BP {
 public:
   BP(Params &params, std::ostream &log, Solution &sol)
       : params(params), best_integer_solution(sol), primal_bound(DBL_MAX),
-        nodes(0), log(log), stats(), initSolValue(-1.0), initSolTime(-1.0) {}
+        nodes(0), log(log), stats() {}
 
   Stats solve(Node *root) {
 
@@ -180,8 +179,6 @@ private:
   int opt_flag;      // Optimality flag
   std::ostream &log;
   Stats stats;
-  double initSolValue; // Value of the initial solution in the root
-  double initSolTime;  // Time of the initial solution in the root
   double rootval;
 
   Stats return_stats(STATE state) {
@@ -205,8 +202,6 @@ private:
       stats.lb = calculate_dual_bound();
       stats.gap = get_gap() / 100;
     }
-    stats.initSol = static_cast<int>(initSolValue + 0.5);
-    stats.initSolTime = initSolTime;
 
     return stats;
   }
@@ -216,27 +211,22 @@ private:
     nodes++;
     double obj_value;
 
-    // Apply heuristic
-    double heurTime = 0.0;
-    bool solFound = node->heuristic(obj_value, heurTime, root);
-    if (solFound)
-      // Update primal bound if possible
-      if (obj_value < primal_bound) {
-        update_primal_bound(obj_value);
-        node->save_heur(best_integer_solution);
-      }
-
     // Solve the linear relaxation of the node and prune if possible
     double elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                          ClockType::now() - start_t)
                          .count();
     LP_STATE state = node->solve(params.timeLimit - elapsed, stats);
 
-    if (root) {
+    if (root)
       rootval = node->get_obj_value();
-      initSolTime = heurTime;
-      if (solFound)
-        initSolValue = obj_value;
+
+    // If a better feasible solution was found, save it
+    if (node->feas_sol()) {
+      obj_value = node->feas_value();
+      if (obj_value < primal_bound) {
+        node->save_heur(best_integer_solution);
+        update_primal_bound(obj_value);
+      }
     }
 
     switch (state) {

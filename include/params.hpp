@@ -4,6 +4,7 @@
 #include <string>
 
 struct Params {
+
   // General options
   // timeLimit: overall time limit for the algorithm (in seconds)
   // dfs: use depth-first strategy in the B&P tree
@@ -11,6 +12,7 @@ struct Params {
   size_t timeLimit;
   bool dfs;
   bool onlyRelaxation;
+
   // Heuristic options
   // heuristicRootNode: type of heuristic for the root node
   //    0: no heuristic
@@ -30,10 +32,30 @@ struct Params {
   size_t heuristicRootIter;
   int heuristicOtherNodes;
   size_t heuristicOtherIter;
+
+  // Feasibility check options
+  // feasibilityRootNode: type of feasibility check for the root node
+  //    0: no check
+  //    1: enumerative
+  //    2: ILP
+  // feasibilityRootNodeTimeLimit: time limit for feasibility check (in
+  // seconds). Only for ILP
+  // feasibilityOtherNodes: type of feasibility check for other nodes
+  //    0: no check
+  //    1: enumerative
+  //    2: ILP
+  // feasibilityOtherNodesTimeLimit: time limit for feasibility check (in
+  // seconds). Only for ILP
+  int feasibilityRootNode;
+  int feasibilityRootNodeTimeLimit;
+  int feasibilityOtherNodes;
+  int feasibilityOtherNodesTimeLimit;
+
   // Initialization options
   // initializationBigWeight: weight of dummy column during initialization
   // initializationUseHeur: use heuristic to find an initial solution
   double initializationBigWeight;
+
   // Preprocessing options
   // preprocStep1: make each V_a a clique
   // preprocStep2: remove vertices for each a with |V_a| = 1
@@ -41,8 +63,11 @@ struct Params {
   bool preprocStep1;
   bool preprocStep2;
   bool preprocStep3;
-  // Pool of columns
+
+  // Column generation options
+  // usePool: use a pool of columns (not implemented yet)
   bool usePool;
+
   // Pricing options
   // pricingHeur1: use greedy heuristic for pricing
   // pricingHeur2: use MWSSP I heuristic for pricing
@@ -58,9 +83,12 @@ struct Params {
   int pricingOrder;
   size_t pricingHeur1MaxNCols;
   size_t pricingExactTimeLimit;
+
   Params()
       : timeLimit(900), dfs(false), onlyRelaxation(false), heuristicRootNode(4),
         heuristicRootIter(100), heuristicOtherNodes(3), heuristicOtherIter(50),
+        feasibilityRootNode(2), feasibilityRootNodeTimeLimit(300),
+        feasibilityOtherNodes(2), feasibilityOtherNodesTimeLimit(60),
         initializationBigWeight(1000.0), preprocStep1(true), preprocStep2(true),
         preprocStep3(true), usePool(false), pricingHeur1(true),
         pricingHeur2(true), pricingHeur3(true), pricingOrder(1),

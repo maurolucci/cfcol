@@ -44,10 +44,11 @@ col.o: src/col.cpp include/col.hpp include/graph.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS)
 
 lp.o: src/lp.cpp include/lp.hpp include/col.hpp include/cplex_env.hpp \
-include/graph.hpp include/stats.hpp include/params.hpp
+include/graph.hpp include/stats.hpp include/params.hpp include/feas.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
 
-feas.o: src/feas.cpp include/graph.hpp include/stats.hpp include/pricing.hpp
+feas.o: src/feas.cpp include/graph.hpp include/stats.hpp include/pricing.hpp \
+include/col.hpp include/feas.hpp include/params.hpp include/heur.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
 
 main.o: main.cpp include/bp.hpp include/lp.hpp include/graph.hpp \

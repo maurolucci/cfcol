@@ -33,7 +33,8 @@ void Stats::write_stats(std::ostream &file) {
        << "," << get_state_as_str() << "," << time << "," << nodes << ","
        << nodesLeft << "," << initSol << "," << initSolTime << "," << rootval
        << "," << lb << "," << ub << "," << gap << "," << ninfeas << "," << ngcp
-       << "," << poolSize << "," << nCallsHeur << "," << nCallsMWis1 << ","
+       << "," << poolSize << "," << heurTime << "," << nCallsFeas << ","
+       << feasTime << "," << nCallsHeur << "," << nCallsMWis1 << ","
        << nCallsMWis2 << "," << nCallsExact << "," << nColsPool << ","
        << nColsHeur << "," << nColsMwis1 << "," << nColsMwis2 << ","
        << nColsExact << "," << nTimePool << "," << nTimeHeur << ","
@@ -66,6 +67,9 @@ void Stats::print_stats(std::ostream &file) {
   file << "Infeasible instances detected: " << ninfeas << std::endl;
   file << "GCP instances reached: " << ngcp << std::endl;
   file << "Size of pool: " << poolSize << std::endl;
+  file << "DPCP heuristic time: " << heurTime << std::endl;
+  file << "DPCP feasibility check calls: " << nCallsFeas << std::endl;
+  file << "DPCP feasibility check time: " << feasTime << std::endl;
   file << "Pricing (calls, cols, time):" << std::endl;
   file << "\tPool: " << nCallsPool << ", " << nColsPool << ", " << nTimePool
        << std::endl;

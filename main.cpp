@@ -71,6 +71,18 @@ int main(int argc, const char **argv) {
       "semi-greedy 2-step)");
   desc.add_options()("heur-nodes-iter", po::value<size_t>()->default_value(50),
                      "number of iterations for the other nodes heuristic");
+  desc.add_options()("feas-root", po::value<int>()->default_value(2),
+                     "type of feasibility check for the root node (0: no "
+                     "check, 1: enumerative, 2: ILP)");
+  desc.add_options()(
+      "feas-root-time", po::value<int>()->default_value(300),
+      "time limit for feasibility check (in seconds). Only for ILP");
+  desc.add_options()("feas-nodes", po::value<int>()->default_value(2),
+                     "type of feasibility check for other nodes (0: no "
+                     "check, 1: enumerative, 2: ILP)");
+  desc.add_options()(
+      "feas-nodes-time", po::value<int>()->default_value(60),
+      "time limit for feasibility check (in seconds). Only for ILP");
   desc.add_options()("dummy-weight", po::value<double>()->default_value(1000.0),
                      "weight of dummy column during initialization");
   desc.add_options()("preproc-off", "do not preprocess the input graph");
@@ -121,6 +133,10 @@ int main(int argc, const char **argv) {
   params.heuristicRootIter = vm["heur-root-iter"].as<size_t>();
   params.heuristicOtherNodes = vm["heur-nodes"].as<int>();
   params.heuristicOtherIter = vm["heur-nodes-iter"].as<size_t>();
+  params.feasibilityRootNode = vm["feas-root"].as<int>();
+  params.feasibilityRootNodeTimeLimit = vm["feas-root-time"].as<int>();
+  params.feasibilityOtherNodes = vm["feas-nodes"].as<int>();
+  params.feasibilityOtherNodesTimeLimit = vm["feas-nodes-time"].as<int>();
   params.initializationBigWeight = vm["dummy-weight"].as<double>();
   params.preprocStep1 = !vm.count("preproc-off");
   params.preprocStep2 = !vm.count("preproc-off");
@@ -228,11 +244,14 @@ int main(int argc, const char **argv) {
       } else if (solver == "feas-enum") {
         out.logFile << "Deciding feasibility of instance " << path
                     << " with enumerative method" << std::endl;
-        stats = dpcp_decide_feasibility_enumerative(graph, params, out.logFile);
+        stats = dpcp_decide_feasibility_enumerative(
+            GraphEnv(&graph, false, false, false, true), col, out.logFile);
       } else if (solver == "feas-ilp") {
         out.logFile << "Deciding feasibility of instance " << path
                     << " with ILP" << std::endl;
-        stats = dpcp_decide_feasibility_ilp(graph, params, out.logFile);
+        stats = dpcp_decide_feasibility_ilp(
+            GraphEnv(&graph, false, false, false, true), col, params.timeLimit,
+            out.logFile);
       } else {
         std::cerr << "Unknown solver: " << solver << std::endl;
         return 2;

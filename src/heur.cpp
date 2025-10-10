@@ -261,8 +261,8 @@ bool first_step(const GraphEnv &genv, VertexVector &selected,
 // Second step of the 2-step heuristic for DPCP
 // Color the selected vertices using DSATUR on the graph induced by them,
 // collapsing vertices of each Vb
-void second_step(const GraphEnv &genv, VertexVector &selected,
-                 std::map<TypeB, std::set<TypeB>> &adj, Col &col) {
+void dpcp_dsatur_heur(const GraphEnv &genv, VertexVector &selected,
+                      std::map<TypeB, std::set<TypeB>> &adj, Col &col) {
   std::map<TypeB, size_t> bs; // Map from b to its new index (in the subgraph)
   std::vector<TypeB> invbs;   // Map from new index (in the subgraph) to b
   std::map<TypeB, VertexVector>
@@ -321,7 +321,7 @@ Stats dpcp_2_step_greedy_heur(const GraphEnv &genv, Col &col, size_t variant) {
     stats.state = INFEASIBLE;
   } else {
     // Second step
-    second_step(genv, selected, adj, col);
+    dpcp_dsatur_heur(genv, selected, adj, col);
     assert(col.check_coloring(genv.graph));
     stats.state = FEASIBLE;
     stats.ub = static_cast<double>(col.get_n_colors());
@@ -353,7 +353,7 @@ Stats dpcp_2_step_semigreedy_heur(const GraphEnv &genv, Col &col, size_t nIters,
     } else {
       // Second step
       Col newCol;
-      second_step(genv, selected, adj, newCol);
+      dpcp_dsatur_heur(genv, selected, adj, newCol);
       if (col.get_n_colors() == 0 || newCol.get_n_colors() < col.get_n_colors())
         col = newCol;
     }

@@ -1,4 +1,5 @@
 #include "feas.hpp"
+#include "heur.hpp"
 
 extern "C" {
 #include "color.h"
@@ -12,7 +13,7 @@ extern "C" {
 
 #define FEASIBILITY_EPSILON 0.00001 // 10e-5
 
-Stats dpcp_decide_feasibility_enumerative(const Graph &graph_, Params &params,
+Stats dpcp_decide_feasibility_enumerative(const GraphEnv &_genv, Col &col,
                                           std::ostream &log) {
 
   // Initial time instant
@@ -20,7 +21,7 @@ Stats dpcp_decide_feasibility_enumerative(const Graph &graph_, Params &params,
 
   // First make a copy of the graph
   Graph g;
-  graph_copy(graph_, g);
+  graph_copy(_genv.graph, g);
   GraphEnv genv(&g, true, false, false, true);
 
   // Remove edges whose endpoints do not belongs to the same Va and Vb
@@ -62,6 +63,35 @@ Stats dpcp_decide_feasibility_enumerative(const Graph &graph_, Params &params,
                       ecount, elist, mwis_pi, mwis_pi_scalef, 0, 0, 2);
 
   assert(nnewsets > 0);
+
+  // If the maximum stable set has size |A|, then we have found a feasible
+  // solution of DPCP
+  if (newsets[0].count == static_cast<int>(genv.nA)) {
+    // First, find selected vertices
+    VertexVector selected;
+    std::map<TypeB, std::set<TypeB>> adj;
+    for (int i = 0; i < newsets[0].count; ++i) {
+      int vi = newsets[0].members[i];
+      Vertex v = vertex(vi, _genv.graph);
+      // Add adjacencies
+      for (auto u : selected) {
+        // Warning: adjacencies must be checked in the original graph, as the
+        // new graph may not contain all edges
+        if (edge(u, v, _genv.graph).second) {
+          TypeB bb = _genv.graph[u].second;
+          TypeB b = _genv.graph[v].second;
+          if (b < bb)
+            adj[b].insert(bb);
+          else if (bb > b)
+            adj[bb].insert(b);
+        }
+      }
+      selected.push_back(v);
+    }
+    // Then, color them
+    dpcp_dsatur_heur(_genv, selected, adj, col);
+    assert(col.check_coloring(_genv.graph));
+  }
 
   // Save stats
   Stats stats;
@@ -116,15 +146,15 @@ public:
   ~EarlyStopCallback(){};
 };
 
-Stats dpcp_decide_feasibility_ilp(const Graph &graph_, Params &params,
-                                  std::ostream &log) {
+Stats dpcp_decide_feasibility_ilp(const GraphEnv &_genv, Col &col,
+                                  int timeLimit, std::ostream &log) {
 
   // Initial time instant
   auto start = std::chrono::high_resolution_clock::now();
 
   // First make a copy of the graph
   Graph g;
-  graph_copy(graph_, g);
+  graph_copy(_genv.graph, g);
   GraphEnv genv(&g, true, false, false, true);
 
   // Remove edges whose endpoints do not belongs to the same Va and Vb
@@ -178,7 +208,7 @@ Stats dpcp_decide_feasibility_ilp(const Graph &graph_, Params &params,
   cplex.setDefaults();
   cplex.setParam(IloCplex::Param::Parallel, 1); // Deterministic mode
   cplex.setParam(IloCplex::Param::Threads, 1);  // Single thread
-  cplex.setParam(IloCplex::Param::TimeLimit, params.timeLimit);
+  cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
 
   // Create the callback object
   EarlyStopCallback cb(genv.nA, log);
@@ -192,10 +222,46 @@ Stats dpcp_decide_feasibility_ilp(const Graph &graph_, Params &params,
   // Finally, we can solve the model
   cplex.solve();
 
+  // If optimal and obj value >= nA, then we have a feasible solution of DPCP
+  // We must find the coloring in the original graph
+  if (cplex.getCplexStatus() == IloCplex::Optimal &&
+      static_cast<size_t>(cplex.getObjValue()) >= genv.nA) {
+    // Get variable values
+    IloNumArray vals(cxenv);
+    cplex.getValues(vals, x);
+    // First, find selected vertices
+    VertexVector selected;
+    std::map<TypeB, std::set<TypeB>> adj;
+    for (auto vv : boost::make_iterator_range(vertices(g))) {
+      Vertex v = vertex(genv.getId[vv], _genv.graph);
+      if (vals[genv.getId[v]] > 0.5) {
+        // Add adjacencies
+        for (auto u : selected) {
+          if (edge(u, v, _genv.graph).second) {
+            TypeB bb = _genv.graph[u].second;
+            TypeB b = _genv.graph[v].second;
+            if (b < bb)
+              adj[b].insert(bb);
+            else if (bb > b)
+              adj[bb].insert(b);
+          }
+        }
+        // Add new selected vertex
+        selected.push_back(v);
+      }
+    }
+    // Then, color them
+    dpcp_dsatur_heur(_genv, selected, adj, col);
+    assert(col.check_coloring(_genv.graph));
+    vals.end();
+  }
+
   // Save stats
   Stats stats;
   if (cplex.getCplexStatus() == IloCplex::Optimal) {
-    stats.state = cplex.getObjValue() >= genv.nA ? FEASIBLE : INFEASIBLE;
+    stats.state = static_cast<size_t>(cplex.getObjValue()) >= genv.nA
+                      ? FEASIBLE
+                      : INFEASIBLE;
     stats.lb = cplex.getObjValue();
   } else if (cplex.getCplexStatus() == IloCplex::AbortUser) {
     stats.state = INFEASIBLE;

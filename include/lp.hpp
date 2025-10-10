@@ -33,13 +33,21 @@ public:
   // Get objective value (after calling optimize)
   [[nodiscard]] double get_obj_value() const { return objVal; };
 
-  // Apply heuristic
-  [[nodiscard]] bool solve_heur(double &obj_value, double &time, bool isRoot);
+  // Tell whether a feasible solution was found (after calling optimize)
+  // Either found by the heuristic or the feasibility check
+  [[nodiscard]] bool has_feas_sol() const {
+    return initSol.get_n_colors() > 0;
+  };
+
+  // Get the cost of the feasible solution (after calling optimize)
+  [[nodiscard]] size_t get_feas_value() const {
+    return initSol.get_n_colors();
+  };
 
   // Save the optimal solution (after calling optimize)
   void save_lp_solution(Col &col);
 
-  // Save the heuristic solution (after calling solve_heur)
+  // Save the heuristic solution (after calling optimize)
   void save_heur_solution(Col &col);
 
   // Branch (after calling optimize)
@@ -68,13 +76,21 @@ private:
   bool initializedWithDummy;
   // Log file
   std::ostream &log;
+  // Is root the node?
+  bool isRoot;
+  // LP state
+  LP_STATE state;
 
   // // Map from current vertices to original vertices
   // std::vector<Vertex> vertexMap;
   // // Map from original vertices to current vertices
   // std::vector<int> invVertexMap;
 
-  void solve_heur_aux(Stats &stats, int heur, int iters);
+  // Heuristic solution of the DPCP instances at the current node
+  void heuristic(Stats &stats, Params &params);
+
+  // Check the feasibility of the DPCP instance at the current node
+  void feasibility_check(Stats &stats, Params &params);
 
   // Initialize the linear relaxation with an initial set of columns
   void add_constraints_and_objective(CplexEnv &cenv);

@@ -1,4 +1,5 @@
 #include "lp.hpp"
+#include "feas.hpp"
 #include "heur.hpp"
 #include "pricing.hpp"
 #include "random.hpp"
@@ -12,23 +13,8 @@ LP::LP(Graph *graph, Params &params, Pool &pool, Graph &origGraph,
     : in(GraphEnv(graph, params.preprocStep1, params.preprocStep2,
                   params.preprocStep3, isRoot)),
       params(params), stables(), posVars(), objVal(-1.0), initSol(), pool(pool),
-      origGraph(origGraph), initializedWithDummy(false),
-      log(log){
-
-          // // Translate original vertices to current vertices and viceversa
-          // vertexMap.resize(num_vertices(graph));
-          // invVertexMap.resize(num_vertices(origGraph), -1);
-          // for (Vertex v : boost::make_iterator_range(vertices(origGraph))) {
-          //   auto [av, bv] = origGraph[v];
-          //   for (Vertex u : boost::make_iterator_range(vertices(graph))) {
-          //     auto [au, bu] = graph[u];
-          //     if (av == au && bv == bu) {
-          //       vertexMap[u] = v;
-          //       invVertexMap[v] = u;
-          //     }
-          //   }
-          // }
-      };
+      origGraph(origGraph), initializedWithDummy(false), log(log),
+      isRoot(isRoot), state(LP_UNSOLVED) {}
 
 LP::~LP() {
   if (in.graphPtr != NULL)
@@ -142,7 +128,6 @@ std::pair<bool, StableEnv> LP::translate_stable_from_pool(StableEnv &stab,
 LP_STATE LP::optimize(double timelimit, Stats &stats) {
 
   auto startTime = std::chrono::high_resolution_clock::now();
-  LP_STATE state = LP_UNSOLVED;
 
   // Check if the instance is infeasible
   if (in.isInfeasible) {
@@ -158,11 +143,41 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
     return solve_GCP(timelimit);
   }
 
+  // Apply heuristic at the current node
+  Stats heurStats, feasStats;
+  heuristic(heurStats, params);
+  stats.heurTime += heurStats.time;
+
+  // If no solution was found, apply the feasibility check
+  if (initSol.get_n_colors() == 0) {
+    feasibility_check(feasStats, params);
+    stats.nCallsFeas++;
+    stats.feasTime += feasStats.time;
+
+    // If instance is infeasible, return
+    if (feasStats.state == INFEASIBLE) {
+      log << "# infeasible instance detected during feasibility check"
+          << std::endl;
+      stats.ninfeas++;
+      return LP_INFEASIBLE;
+    }
+  }
+
+  // Update stats for the root node
+  if (isRoot) {
+    stats.initSol = initSol.get_n_colors();
+    stats.initSolTime = heurStats.time + feasStats.time;
+  }
+
   // Initialize cplex environment
   CplexEnv cenv;
   IloCplex cplex(cenv.Xmodel);
   set_parameters(cenv, cplex);
   add_constraints_and_objective(cenv);
+
+  // Add initial columns
+  // If a feasible solution was found by the heuristic or the feasibility check,
+  // then use them Otherwise, use a dummy column
   add_initial_columns(cenv);
 
   // Initialize arrays for dual values
@@ -375,8 +390,8 @@ int LP::pricing_mwss1(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
   size_t nMwis1Cols = 0;
   auto res = penv.mwis1_solve(dualsA, dualsB);
   stats.nCallsMWis1++;
-  for (auto &[stab, state] : res) {
-    if (state == PRICING_STABLE_FOUND) {
+  for (auto &[stab, priState] : res) {
+    if (priState == PRICING_STABLE_FOUND) {
       add_column(cenv, stab);
       nMwis1Cols++;
       stats.nColsMwis1++;
@@ -479,7 +494,6 @@ int LP::pricing(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
 
 /* Solve a graph coloring problem instance with exactcolors */
 LP_STATE LP::solve_GCP(double timelimit) {
-  LP_STATE state;
 
   COLORproblem colorproblem;
   COLORparms *parms = &(colorproblem.parms);
@@ -631,7 +645,11 @@ Vertex LP::get_branching_variable(const IloNumArray &values) {
   return best_v;
 }
 
-void LP::solve_heur_aux(Stats &stats, int heur, int iters) {
+// Heuristic solution of the DPCP instances at the current node
+// The heuristic used is selected depending on the parameters
+void LP::heuristic(Stats &stats, Params &params) {
+  int heur = isRoot ? params.heuristicRootNode : params.heuristicOtherNodes;
+  int iters = isRoot ? params.heuristicRootIter : params.heuristicOtherIter;
   if (heur == 1)
     stats = dpcp_1_step_greedy_heur(in, initSol);
   else if (heur == 2)
@@ -643,23 +661,20 @@ void LP::solve_heur_aux(Stats &stats, int heur, int iters) {
   return;
 }
 
-bool LP::solve_heur(double &obj_value, double &time, bool isRoot) {
-  if (isRoot && params.heuristicRootNode == 0)
-    return false;
-  if (!isRoot && params.heuristicOtherNodes == 0)
-    return false;
-  Stats stats;
-  if (isRoot)
-    solve_heur_aux(stats, params.heuristicRootNode, params.heuristicRootIter);
-  else
-    solve_heur_aux(stats, params.heuristicOtherNodes,
-                   params.heuristicOtherIter);
-  time = stats.time;
-  if (stats.state == FEASIBLE) {
-    obj_value = initSol.get_n_colors();
-    return true;
-  }
-  return false;
+// Check the feasibility of the DPCP instance at the current node
+// The feasibility check used is selected depending on the parameters
+void LP::feasibility_check(Stats &stats, Params &params) {
+  int check =
+      isRoot ? params.feasibilityRootNode : params.feasibilityOtherNodes;
+  int timeLimit = isRoot ? params.feasibilityRootNodeTimeLimit
+                         : params.feasibilityOtherNodesTimeLimit;
+  // Null ofstream
+  std::ostream nullstream(0);
+  if (check == 1)
+    stats = dpcp_decide_feasibility_enumerative(in, initSol, nullstream);
+  else if (check == 2)
+    stats = dpcp_decide_feasibility_ilp(in, initSol, timeLimit, nullstream);
+  return;
 }
 
 void LP::save_lp_solution(Col &col) {
@@ -688,8 +703,19 @@ void LP::save_lp_solution(Col &col) {
 }
 
 void LP::save_heur_solution(Col &col) {
+
+  assert(initSol.get_n_colors() > 0);
+
+  // Reset coloring
   col.reset_coloring();
-  col = initSol;
+
+  // Translate coloring to the original graph
+  initSol.translate_coloring(in.graph, origGraph, col);
+
+  // Color isolated vertices
+  initSol.color_isolated_vertices(in.isolated, col, origGraph);
+
+  assert(col.check_coloring(origGraph));
   return;
 }
 
