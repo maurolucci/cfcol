@@ -86,6 +86,8 @@ public:
   int ninfeas;
   // Number of GCP instances detected in the byp tree
   int ngcp;
+  // Time spent on solving GCP instances
+  double gcpTime;
   // Size of the pool of columns
   int poolSize;
   // Time required for finding heuristic solutions in the whole byp tree
@@ -116,11 +118,12 @@ public:
       : instance(""), solver(""), run(-1), nvertices(-1), nedges(-1), nA(-1),
         nB(-1), nvars(-1), ncons(-1), state(UNKNOWN), time(0.0), nodes(0),
         nodesLeft(0), initSol(-1), initSolTime(0.0), rootval(-1.0), lb(-1.0),
-        ub(-1), gap(-1.0), ninfeas(0), ngcp(0), poolSize(-1), heurTime(0.0),
-        nCallsFeas(0), feasTime(0.0), nColsPool(0), nColsHeur(0), nColsMwis1(0),
-        nColsMwis2(0), nColsExact(0), nCallsPool(0), nCallsHeur(0),
-        nCallsMWis1(0), nCallsMWis2(0), nCallsExact(0), nTimePool(0.0),
-        nTimeHeur(0.0), nTimeMwis1(0.0), nTimeMwis2(0.0), nTimeExact(0.0) {}
+        ub(-1), gap(-1.0), ninfeas(0), ngcp(0), gcpTime(0.0), poolSize(-1),
+        heurTime(0.0), nCallsFeas(0), feasTime(0.0), nColsPool(0), nColsHeur(0),
+        nColsMwis1(0), nColsMwis2(0), nColsExact(0), nCallsPool(0),
+        nCallsHeur(0), nCallsMWis1(0), nCallsMWis2(0), nCallsExact(0),
+        nTimePool(0.0), nTimeHeur(0.0), nTimeMwis1(0.0), nTimeMwis2(0.0),
+        nTimeExact(0.0) {}
 
   std::string get_state_as_str();
   void write_stats(std::ostream &file);

@@ -126,7 +126,7 @@ private:
                     IloNumArray &dualsA, IloNumArray &dualsB);
 
   // Exact solve of a GCP instance
-  LP_STATE solve_GCP(double timelimit);
+  LP_STATE solve_GCP(Stats &stats, double timelimit);
 
   // Get branching variable
   Vertex get_branching_variable(const IloNumArray &values);

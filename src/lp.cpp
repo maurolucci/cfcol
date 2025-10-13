@@ -139,8 +139,7 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
   // Check if the input is a GCP instance
   if (in.isGCP) {
     log << "# GCP instance reached" << std::endl;
-    stats.ngcp++;
-    return solve_GCP(timelimit);
+    return solve_GCP(stats, timelimit);
   }
 
   // Apply heuristic at the current node
@@ -493,15 +492,22 @@ int LP::pricing(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
 }
 
 /* Solve a graph coloring problem instance with exactcolors */
-LP_STATE LP::solve_GCP(double timelimit) {
+LP_STATE LP::solve_GCP(Stats &stats, double timelimit) {
+
+  auto startTime = std::chrono::high_resolution_clock::now();
+  stats.ngcp++;
 
   COLORproblem colorproblem;
   COLORparms *parms = &(colorproblem.parms);
   colordata *cd = &(colorproblem.root_cd);
   int ncolors = 0;
 
-  if (timelimit < 0)
+  if (timelimit < 0) {
+    stats.gcpTime += std::chrono::duration<double>(
+                         std::chrono::high_resolution_clock::now() - startTime)
+                         .count();
     return LP_TIME_EXCEEDED;
+  }
 
   // Build GCP graph
   GCPGraph graphGCP;
@@ -522,9 +528,6 @@ LP_STATE LP::solve_GCP(double timelimit) {
   cd->id = 0;
   colorproblem.ncolordata = 1;
   parms->branching_cpu_limit = timelimit;
-
-  int COLORproblem_init_with_graph(COLORproblem * problem, int ncount,
-                                   int ecount, const int elist[]);
 
   // Find exact coloring
   COLORexact_coloring(&colorproblem, &ncolors, &colorclasses);
@@ -569,6 +572,9 @@ LP_STATE LP::solve_GCP(double timelimit) {
   COLORproblem_free(&colorproblem);
   COLORfree_sets(&colorclasses, &ncolors);
   COLORlp_free_env();
+  stats.gcpTime += std::chrono::duration<double>(
+                       std::chrono::high_resolution_clock::now() - startTime)
+                       .count();
   return state;
 }
 
