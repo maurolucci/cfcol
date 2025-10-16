@@ -68,6 +68,20 @@ void LP::print_column(StableEnv &stab) {
 
 void LP::add_initial_columns(CplexEnv &cenv) {
 
+  // First, add columns from the father, if any
+  size_t nstables = stables.size();
+  for (size_t i = 0; i < nstables; ++i) {
+    const auto &stab = stables[i];
+    StableEnv stabEnv;
+    for (auto v : stab) {
+      auto [a, b, id] = in.graph[v];
+      stabEnv.stable.push_back(v);
+      stabEnv.as.insert(a);
+      stabEnv.bs.insert(b);
+    }
+    add_column(cenv, stabEnv);
+  }
+
   // If there is an initial solution, add its columns
   if (initSol.get_n_colors() > 0) {
     for (size_t k = 0; k < initSol.get_n_colors(); ++k) {
@@ -317,7 +331,7 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
   }
 
   // Log stats
-  log << "# Dummy init: " << (initializedWithDummy ? "yes" : "no")
+  log << "# LP solved - dummy init: " << (initializedWithDummy ? "yes" : "no")
       << ", Pool: " << (stats.nColsPool - nPoolColsTotal)
       << ", Heur: " << (stats.nColsHeur - nHeurColsTotal)
       << ", MWIS I: " << (stats.nColsMwis1 - nMwis1ColsTotal)
@@ -326,7 +340,7 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
       << std::chrono::duration<double>(
              std::chrono::high_resolution_clock::now() - startTime)
              .count()
-      << ", Obj: " << cplex.getObjValue() << "\n";
+      << " s, Obj: " << objVal << "\n";
 
   cplex.end();
   return state;
@@ -528,6 +542,8 @@ LP_STATE LP::solve_GCP(Stats &stats, double timelimit) {
   cd->id = 0;
   colorproblem.ncolordata = 1;
   parms->branching_cpu_limit = timelimit;
+  // TODO: que hacemos con el UB?
+  // colorproblem.root_cd.upper_bound = 10;
 
   // Find exact coloring
   COLORexact_coloring(&colorproblem, &ncolors, &colorclasses);
@@ -563,7 +579,6 @@ LP_STATE LP::solve_GCP(Stats &stats, double timelimit) {
 
       // Add the translated stable set
       stables.push_back(stable);
-      // stables.push_back(nset);
       posVars.push_back(i);
     }
   } else
@@ -734,14 +749,21 @@ void LP::branch(std::vector<LP *> &branches) {
   // Create a copy of the graph
   Graph *gcopy = new Graph;
   graph_copy(in.graph, in.getId, *gcopy);
-  Vertex branchVarCopy = vertex(in.getId[branchVar], *gcopy);
-  vertex_branching1(*gcopy, branchVarCopy);
+
+  // Map from vertices of the original graph to vertices of the copy
+  std::map<Vertex, Vertex> vertexMap;
+  for (auto v : boost::make_iterator_range(vertices(in.graph)))
+    vertexMap[v] = vertex(in.getId[v], *gcopy);
+
+  // Apply left branching
+  vertex_branching1(*gcopy, vertexMap[branchVar]);
 
   // *******
   // ** Right branch: v is uncolored
   // ** ¡Reuse graph!
   // *******
 
+  // Apply right branching
   vertex_branching2(in.graph, branchVar);
 
   // *******
@@ -753,6 +775,35 @@ void LP::branch(std::vector<LP *> &branches) {
   branches[1] = new LP(in.graphPtr, params, pool, origGraph, log);
 
   in.graphPtr = NULL; // Avoid double free
+
+  // *******
+  // ** Inherit columns from parent
+  // *******
+
+  if (params.inheritColumns > 0) {
+    size_t nstables =
+        params.inheritColumns == 1 ? stables.size() : posVars.size();
+    for (size_t i = 0; i < nstables; ++i) {
+      auto &stab =
+          params.inheritColumns == 1 ? stables[i] : stables[posVars[i]];
+      VertexVector stabLeft, stabRight;
+      for (auto v : stab) {
+        // We need to check if the vertex is still in the graph of the
+        // subproblems since some vertices could have been removed during
+        // branching and preprocessing. Also, in the left branch, we need to
+        // translate the vertex
+        Vertex vl = vertexMap[v];
+        if (branches[0]->in.getId.contains(vl))
+          stabLeft.push_back(vl);
+        if (branches[1]->in.getId.contains(v))
+          stabRight.push_back(v);
+      }
+      if (stabLeft.size() > 0)
+        branches[0]->stables.push_back(stabLeft);
+      if (stabRight.size() > 0)
+        branches[1]->stables.push_back(stabRight);
+    }
+  }
 
   // for (auto v : boost::make_iterator_range(vertices(graph1)))
   //   std::cout << v << ": (" << graph1[v].first << "," << graph1[v].second

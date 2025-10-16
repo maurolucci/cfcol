@@ -83,6 +83,10 @@ int main(int argc, const char **argv) {
   desc.add_options()(
       "feas-nodes-time", po::value<int>()->default_value(60),
       "time limit for feasibility check (in seconds). Only for ILP");
+  desc.add_options()(
+      "inherit-cols", po::value<int>()->default_value(0),
+      "type of column inheritance from parent (0: no inheritance, 1: inherit "
+      "all columns, 2: inherit only basic columns)");
   desc.add_options()("dummy-weight", po::value<double>()->default_value(1000.0),
                      "weight of dummy column during initialization");
   desc.add_options()("preproc-off", "do not preprocess the input graph");
@@ -137,6 +141,7 @@ int main(int argc, const char **argv) {
   params.feasibilityRootNodeTimeLimit = vm["feas-root-time"].as<int>();
   params.feasibilityOtherNodes = vm["feas-nodes"].as<int>();
   params.feasibilityOtherNodesTimeLimit = vm["feas-nodes-time"].as<int>();
+  params.inheritColumns = vm["inherit-cols"].as<int>();
   params.initializationBigWeight = vm["dummy-weight"].as<double>();
   params.preprocStep1 = !vm.count("preproc-off");
   params.preprocStep2 = !vm.count("preproc-off");

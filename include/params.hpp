@@ -52,8 +52,12 @@ struct Params {
   int feasibilityOtherNodesTimeLimit;
 
   // Initialization options
+  // inheritColumns: type of column inheritance from parent
+  //     0: no inheritance
+  //     1: inherit all columns
+  //     2: inherit only basic columns
   // initializationBigWeight: weight of dummy column during initialization
-  // initializationUseHeur: use heuristic to find an initial solution
+  int inheritColumns;
   double initializationBigWeight;
 
   // Preprocessing options
@@ -89,10 +93,10 @@ struct Params {
         heuristicRootIter(100), heuristicOtherNodes(3), heuristicOtherIter(50),
         feasibilityRootNode(2), feasibilityRootNodeTimeLimit(300),
         feasibilityOtherNodes(2), feasibilityOtherNodesTimeLimit(60),
-        initializationBigWeight(1000.0), preprocStep1(true), preprocStep2(true),
-        preprocStep3(true), usePool(false), pricingHeur1(true),
-        pricingHeur2(true), pricingHeur3(true), pricingOrder(1),
-        pricingHeur1MaxNCols(1), pricingExactTimeLimit(300){};
+        inheritColumns(0), initializationBigWeight(1000.0), preprocStep1(true),
+        preprocStep2(true), preprocStep3(true), usePool(false),
+        pricingHeur1(true), pricingHeur2(true), pricingHeur3(true),
+        pricingOrder(1), pricingHeur1MaxNCols(1), pricingExactTimeLimit(300){};
 };
 
 #endif // _PARAMS_HPP_
