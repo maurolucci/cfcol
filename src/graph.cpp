@@ -265,13 +265,16 @@ void GraphEnv::init_graphenv() {
   tyA2idA.clear();
   snd.clear();
 
+  std::set<TypeB> B;
+
   // Initialize the other struct members
   for (auto v : boost::make_iterator_range(vertices(graph))) {
     getId.insert(std::make_pair(v, getId.size()));
     TypeA a = graph[v].first;
     TypeB b = graph[v].second;
     bool retA = tyA2idA.insert({a, nA}).second;
-    bool retB = tyB2idB.insert({b, nB}).second;
+    // bool retB = tyB2idB.insert({b, nB}).second;
+    bool retB = B.insert(b).second;
     if (retA) {
       idA2TyA.push_back(a);
       snd.push_back(std::vector<Vertex>{v});
@@ -283,15 +286,29 @@ void GraphEnv::init_graphenv() {
       isGCP = false;
     }
     if (retB) {
-      idB2TyB.push_back(b);
+      // idB2TyB.push_back(b);
       fst.push_back(std::vector<Vertex>{v});
       Vb.emplace(b, std::vector<Vertex>{v});
       nB++;
     } else {
-      fst[tyB2idB[b]].push_back(v);
+      // fst[tyB2idB[b]].push_back(v);
       Vb[b].push_back(v);
     }
   }
+
+  // Use B to initializa idB2TyB
+  for (const auto &b : B)
+    idB2TyB.push_back(b);
+
+  // Sort idB2TyB by decreasing order of |Vb|
+  std::sort(idB2TyB.begin(), idB2TyB.end(),
+            [this](const TypeB b1, const TypeB b2) {
+              return Vb[b1].size() > Vb[b2].size();
+            });
+
+  // Initialize tyB2idB
+  for (size_t i = 0; i < idB2TyB.size(); ++i)
+    tyB2idB[idB2TyB[i]] = i;
 }
 
 StableEnv::StableEnv() : stable(), as(), bs(), cost(0.0){};

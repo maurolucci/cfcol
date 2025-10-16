@@ -37,14 +37,20 @@ void LP::add_constraints_and_objective(CplexEnv &cenv) {
   return;
 }
 
-void LP::add_column(CplexEnv &cenv, StableEnv &stab) {
+void LP::add_column(CplexEnv &cenv, StableEnv &stab, bool addStable = true) {
   IloNumColumn column = cenv.Xobj(1.0);
   for (auto a : stab.as)
     column += cenv.XrestrA[in.tyA2idA[a]](1.0);
-  for (auto b : stab.bs)
+  for (auto b : stab.bs) {
+    // Do no add redundant constraints
+    // It is necessary that B is sorted by decreasing |V^b|
+    if (in.Vb[b].size() <= 1)
+      continue;
     column += cenv.XrestrB[in.tyB2idB[b]](-1.0);
+  }
   cenv.Xvars.add(IloNumVar(column));
-  stables.push_back(VertexVector(stab.stable)); // Push a copy
+  if (addStable)
+    stables.push_back(VertexVector(stab.stable)); // Push a copy
   // print_column(stab);
 }
 
@@ -72,6 +78,8 @@ void LP::add_initial_columns(CplexEnv &cenv) {
   size_t nstables = stables.size();
   for (size_t i = 0; i < nstables; ++i) {
     const auto &stab = stables[i];
+    if (stab.size() == 0)
+      continue; // Skip dummy column
     StableEnv stabEnv;
     for (auto v : stab) {
       auto [a, b, id] = in.graph[v];
@@ -79,7 +87,7 @@ void LP::add_initial_columns(CplexEnv &cenv) {
       stabEnv.as.insert(a);
       stabEnv.bs.insert(b);
     }
-    add_column(cenv, stabEnv);
+    add_column(cenv, stabEnv, false);
   }
 
   // If there is an initial solution, add its columns
@@ -94,8 +102,11 @@ void LP::add_initial_columns(CplexEnv &cenv) {
     IloNumColumn z = cenv.Xobj(params.initializationBigWeight);
     for (size_t i = 0; i < in.nA; ++i)
       z += cenv.XrestrA[i](1.0);
-    for (size_t i = 0; i < in.nB; ++i)
+    for (size_t i = 0; i < in.nB; ++i) {
+      if (in.Vb[in.idB2TyB[i]].size() <= 1)
+        continue;
       z += cenv.XrestrB[i](0.0);
+    }
     cenv.Xvars.add(IloNumVar(z));
     stables.push_back(VertexVector()); // Push a null column
     initializedWithDummy = true;
@@ -235,17 +246,19 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
     cplex.getDuals(dualsA, cenv.XrestrA);
     cplex.getDuals(dualsB, cenv.XrestrB);
 
+    // Complete the dual values for redundant constraints
+    for (size_t i = cenv.XrestrB.getSize(); i < in.nB; ++i)
+      dualsB[i] = 0.0;
+
     // *******************************************************************
     // // Print some statics
     // // Dual values
     // std::cout << "dual values: ";
     // for (size_t i = 0; i < in.nA; ++i)
-    //   std::cout << i << "(" << in.idA2TyA[i] << "): " << dualsA[i] << "
-    //   ";
+    //   std::cout << i << "(" << in.idA2TyA[i] << "): " << dualsA[i] << " ";
     // std::cout << std::endl;
     // for (size_t i = 0; i < in.nB; ++i)
-    //   std::cout << i << "(" << in.idB2TyB[i] << "): " << dualsB[i] << "
-    //   ";
+    //   std::cout << i << "(" << in.idB2TyB[i] << "): " << dualsB[i] << " ";
     // std::cout << std::endl;
     // *******************************************************************
 
@@ -331,16 +344,19 @@ LP_STATE LP::optimize(double timelimit, Stats &stats) {
   }
 
   // Log stats
-  log << "# LP solved - dummy init: " << (initializedWithDummy ? "yes" : "no")
-      << ", Pool: " << (stats.nColsPool - nPoolColsTotal)
-      << ", Heur: " << (stats.nColsHeur - nHeurColsTotal)
-      << ", MWIS I: " << (stats.nColsMwis1 - nMwis1ColsTotal)
-      << ", MWIS II: " << (stats.nColsMwis2 - nMwis2ColsTotal)
-      << ", Exact: " << (stats.nColsExact - nExactColsTotal) << ", Time: "
+  log << "# node info # "
+      << ", time: "
       << std::chrono::duration<double>(
              std::chrono::high_resolution_clock::now() - startTime)
              .count()
-      << " s, Obj: " << objVal << "\n";
+      << ", cols " << stables.size()
+      << ", dummy: " << (initializedWithDummy ? "yes" : "no")
+      << ", pool: " << (stats.nColsPool - nPoolColsTotal)
+      << ", heur: " << (stats.nColsHeur - nHeurColsTotal)
+      << ", mwisI: " << (stats.nColsMwis1 - nMwis1ColsTotal)
+      << ", mwisII: " << (stats.nColsMwis2 - nMwis2ColsTotal)
+      << ", exact: " << (stats.nColsExact - nExactColsTotal)
+      << ", obj: " << objVal << "\n";
 
   cplex.end();
   return state;
