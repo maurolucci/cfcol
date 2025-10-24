@@ -70,12 +70,6 @@ public:
   int nodes;
   // Number of nodes left in the queue
   int nodesLeft;
-  // Value of the initial solution
-  int initSol;
-  // Time required to find the initial solution
-  double initSolTime;
-  // Value of the root node relaxation
-  double rootval;
   // Final lower bound
   double lb;
   // Final upper bound
@@ -83,47 +77,61 @@ public:
   // Final optimality gap (in percentage)
   double gap;
   // Number of infeasible instances detected in the byp tree
-  int ninfeas;
+  int ninfeasPrepro, ninfeasCheck;
   // Number of GCP instances detected in the byp tree
   int ngcp;
   // Time spent on solving GCP instances
   double gcpTime;
-  // Size of the pool of columns
-  int poolSize;
-  // Time required for finding heuristic solutions in the whole byp tree
-  double heurTime;
-  // Number of calls to the feasibility check in the whole byp tree
-  int nCallsFeas;
-  // Time required for feasibility checks in the whole byp tree
-  double feasTime;
+  // Root lower bound
+  double rootlb;
+  // Root upper bound
+  int rootub;
+  // Time required for finding the initial solution at the root node
+  double rootHeurTime;
+  // Time required for feasibility check at the root node
+  double rootFeasTime;
   // For each pricing method, number of columns added, number of calls, and
-  // total time required in the whole byp tree
-  int nColsPool;
-  int nColsHeur;
-  int nColsMwis1;
-  int nColsMwis2;
-  int nColsExact;
-  int nCallsPool;
-  int nCallsHeur;
-  int nCallsMWis1;
-  int nCallsMWis2;
-  int nCallsExact;
-  double nTimePool;
-  double nTimeHeur;
-  double nTimeMwis1;
-  double nTimeMwis2;
-  double nTimeExact;
+  // total time required at the root node
+  int rootNColsPool, rootNColsHeur, rootNColsMwis1, rootNColsMwis2,
+      rootNColsExact;
+  int rootNCallsPool, rootNCallsHeur, rootNCallsMwis1, rootNCallsMwis2,
+      rootNCallsExact;
+  double rootTimePool, rootTimeHeur, rootTimeMwis1, rootTimeMwis2,
+      rootTimeExact;
+  // Time required for finding heuristic solutions in at other nodes
+  double otherNodesHeurTime;
+  // Number of calls to the feasibility check at other nodes
+  int otherNodesFeasNCalls;
+  // Time required for feasibility checks at other nodes
+  double otherNodesFeasTime;
+  // For each pricing method, number of columns added, number of calls, and
+  // total time required at other nodes
+  int otherNodesNColsPool, otherNodesNColsHeur, otherNodesNColsMwis1,
+      otherNodesNColsMwis2, otherNodesNColsExact;
+  int otherNodesNCallsPool, otherNodesNCallsHeur, otherNodesNCallsMwis1,
+      otherNodesNCallsMwis2, otherNodesNCallsExact;
+  double otherNodesTimePool, otherNodesTimeHeur, otherNodesTimeMwis1,
+      otherNodesTimeMwis2, otherNodesTimeExact;
 
   Stats()
       : instance(""), solver(""), run(-1), nvertices(-1), nedges(-1), nA(-1),
         nB(-1), nvars(-1), ncons(-1), state(UNKNOWN), time(0.0), nodes(0),
-        nodesLeft(0), initSol(-1), initSolTime(0.0), rootval(-1.0), lb(-1.0),
-        ub(-1), gap(-1.0), ninfeas(0), ngcp(0), gcpTime(0.0), poolSize(-1),
-        heurTime(0.0), nCallsFeas(0), feasTime(0.0), nColsPool(0), nColsHeur(0),
-        nColsMwis1(0), nColsMwis2(0), nColsExact(0), nCallsPool(0),
-        nCallsHeur(0), nCallsMWis1(0), nCallsMWis2(0), nCallsExact(0),
-        nTimePool(0.0), nTimeHeur(0.0), nTimeMwis1(0.0), nTimeMwis2(0.0),
-        nTimeExact(0.0) {}
+        nodesLeft(0), lb(-1.0), ub(-1), gap(-1.0), ninfeasPrepro(0),
+        ninfeasCheck(0), ngcp(0), gcpTime(0.0), rootlb(-1.0), rootub(-1),
+        rootHeurTime(0.0), rootFeasTime(0.0), rootNColsPool(0),
+        rootNColsHeur(0), rootNColsMwis1(0), rootNColsMwis2(0),
+        rootNColsExact(0), rootNCallsPool(0), rootNCallsHeur(0),
+        rootNCallsMwis1(0), rootNCallsMwis2(0), rootNCallsExact(0),
+        rootTimePool(0.0), rootTimeHeur(0.0), rootTimeMwis1(0.0),
+        rootTimeMwis2(0.0), rootTimeExact(0.0), otherNodesHeurTime(0.0),
+        otherNodesFeasNCalls(0), otherNodesFeasTime(0.0),
+        otherNodesNColsPool(0), otherNodesNColsHeur(0), otherNodesNColsMwis1(0),
+        otherNodesNColsMwis2(0), otherNodesNColsExact(0),
+        otherNodesNCallsPool(0), otherNodesNCallsHeur(0),
+        otherNodesNCallsMwis1(0), otherNodesNCallsMwis2(0),
+        otherNodesNCallsExact(0), otherNodesTimePool(0.0),
+        otherNodesTimeHeur(0.0), otherNodesTimeMwis1(0.0),
+        otherNodesTimeMwis2(0.0), otherNodesTimeExact(0.0) {}
 
   std::string get_state_as_str();
   void write_stats(std::ostream &file);

@@ -31,8 +31,8 @@ public:
     return (get_obj_value() > n.get_obj_value());
   }
 
-  LP_STATE solve(double timelimit, Stats &stats) {
-    LP_STATE state = lp->optimize(timelimit, stats);
+  LP_STATE solve(double timelimit, double ub, Stats &stats) {
+    LP_STATE state = lp->optimize(timelimit, ub, stats);
     return state;
   }
 
@@ -179,7 +179,6 @@ private:
   int opt_flag;      // Optimality flag
   std::ostream &log;
   Stats stats;
-  double rootval;
 
   Stats return_stats(STATE state) {
     stats.state = state;
@@ -191,7 +190,6 @@ private:
     }
     stats.nodes = static_cast<int>(nodes);
     stats.nodesLeft = static_cast<int>(L.size());
-    stats.rootval = rootval;
     stats.ub = static_cast<int>(primal_bound + 0.5);
     if (state == OPTIMAL) {
       stats.lb = primal_bound;
@@ -215,10 +213,8 @@ private:
     double elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                          ClockType::now() - start_t)
                          .count();
-    LP_STATE state = node->solve(params.timeLimit - elapsed, stats);
-
-    if (root)
-      rootval = node->get_obj_value();
+    LP_STATE state =
+        node->solve(params.timeLimit - elapsed, primal_bound, stats);
 
     // If a better feasible solution was found, save it
     if (node->feas_sol()) {

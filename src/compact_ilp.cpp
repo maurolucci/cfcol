@@ -30,8 +30,8 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
 
   // Save initial solution stats
   if (params.heuristicRootNode >= 1 && params.heuristicRootNode <= 4) {
-    stats.initSol = initialCol.get_n_colors();
-    stats.initSolTime = stats.time;
+    stats.rootub = initialCol.get_n_colors();
+    stats.rootHeurTime = stats.time;
   }
 
   // Number of colors
@@ -136,7 +136,6 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
     cplex.addMIPStart(startVar, startVal);
     startVal.end();
     startVar.end();
-    stats.initSol = initialCol.get_n_colors();
   }
 
   // Set parameters

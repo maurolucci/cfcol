@@ -28,7 +28,7 @@ public:
   ~LP();
 
   // Optimize the linear relaxation by column generation
-  [[nodiscard]] LP_STATE optimize(double timelimit, Stats &stats);
+  [[nodiscard]] LP_STATE optimize(double timelimit, double ub, Stats &stats);
 
   // Get objective value (after calling optimize)
   [[nodiscard]] double get_obj_value() const { return objVal; };
@@ -113,20 +113,20 @@ private:
 
   // Solve pricing problem
   int pricing(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-              IloNumArray &dualsA, IloNumArray &dualsB);
+              IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
   int pricing_pool(CplexEnv &cenv, Stats &stats, IloNumArray &dualsA,
-                   IloNumArray &dualsB);
+                   IloNumArray &dualsB, bool isRoot);
   int pricing_greedy(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                     IloNumArray &dualsA, IloNumArray &dualsB);
+                     IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
   int pricing_mwss1(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                    IloNumArray &dualsA, IloNumArray &dualsB);
+                    IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
   int pricing_mwss2(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                    IloNumArray &dualsA, IloNumArray &dualsB);
+                    IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
   int pricing_exact(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                    IloNumArray &dualsA, IloNumArray &dualsB);
+                    IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
 
   // Exact solve of a GCP instance
-  LP_STATE solve_GCP(Stats &stats, double timelimit);
+  LP_STATE solve_GCP(Stats &stats, double timelimit, double ub);
 
   // Get branching variable
   Vertex get_branching_variable(const IloNumArray &values);
