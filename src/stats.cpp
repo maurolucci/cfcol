@@ -60,22 +60,21 @@ void Stats::write_stats(std::ostream &file) {
            otherNodesNCallsMwis2 + otherNodesNCallsExact) /
               onodes
        << "," << otherNodesNCallsPool / onodes << ","
-       << otherNodesNCallsHeur / onodes << ", "
-       << otherNodesNCallsMwis1 / onodes << ","
-       << otherNodesNCallsMwis2 / onodes << ","
-       << otherNodesNCallsExact / onodes
+       << otherNodesNCallsHeur / onodes << "," << otherNodesNCallsMwis1 / onodes
+       << "," << otherNodesNCallsMwis2 / onodes << ","
+       << otherNodesNCallsExact / onodes << ","
        << (otherNodesNColsPool + otherNodesNColsHeur + otherNodesNColsMwis1 +
            otherNodesNColsMwis2 + otherNodesNColsExact) /
               onodes
        << "," << otherNodesNColsPool / onodes << ","
-       << otherNodesNColsHeur / onodes << ", " << otherNodesNColsMwis1 / onodes
+       << otherNodesNColsHeur / onodes << "," << otherNodesNColsMwis1 / onodes
        << "," << otherNodesNColsMwis2 / onodes << ","
        << otherNodesNColsExact / onodes << ","
        << (otherNodesTimePool + otherNodesTimeHeur + otherNodesTimeMwis1 +
            otherNodesTimeMwis2 + otherNodesTimeExact) /
               onodes
        << "," << otherNodesTimePool / onodes << ","
-       << otherNodesTimeHeur / onodes << ", " << otherNodesTimeMwis1 / onodes
+       << otherNodesTimeHeur / onodes << "," << otherNodesTimeMwis1 / onodes
        << "," << otherNodesTimeMwis2 / onodes << ","
        << otherNodesTimeExact / onodes << std::endl;
 }

@@ -97,6 +97,49 @@ struct Params {
         preprocStep2(true), preprocStep3(true), usePool(false),
         pricingHeur1(true), pricingHeur2(true), pricingHeur3(true),
         pricingOrder(1), pricingHeur1MaxNCols(1), pricingExactTimeLimit(300){};
+
+  void print_params(std::ostream &out) {
+    out << "*** Parameters ***:" << std::endl;
+    out << "Time limit: " << timeLimit << " seconds" << std::endl;
+    out << "DFS strategy: " << (dfs ? "enabled" : "disabled") << std::endl;
+    out << "Only relaxation: " << (onlyRelaxation ? "enabled" : "disabled")
+        << std::endl;
+    out << "Heuristic root node: " << heuristicRootNode;
+    if (heuristicRootNode == 2 || heuristicRootNode == 4)
+      out << ", iterations: " << heuristicRootIter;
+    out << std::endl;
+    out << "Heuristic other nodes: " << heuristicOtherNodes;
+    if (heuristicOtherNodes == 2 || heuristicOtherNodes == 4)
+      out << ", iterations: " << heuristicOtherIter;
+    out << std::endl;
+    out << "Feasibility root node: " << feasibilityRootNode
+        << ", time limit: " << feasibilityRootNodeTimeLimit << " seconds"
+        << std::endl;
+    out << "Feasibility other nodes: " << feasibilityOtherNodes
+        << ", time limit: " << feasibilityOtherNodesTimeLimit << " seconds"
+        << std::endl;
+    out << "Inherit columns: " << inheritColumns << std::endl;
+    out << "Initialization big weight: " << initializationBigWeight
+        << std::endl;
+    out << "Preprocessing step 1 (clique V_a): "
+        << (preprocStep1 ? "enabled" : "disabled") << std::endl;
+    out << "Preprocessing step 2 (remove |V_a|=1): "
+        << (preprocStep2 ? "enabled" : "disabled") << std::endl;
+    out << "Preprocessing step 3 (vanish isolated): "
+        << (preprocStep3 ? "enabled" : "disabled") << std::endl;
+    out << "Use column pool: " << (usePool ? "enabled" : "disabled")
+        << std::endl;
+    out << "Pricing heuristic 1 (greedy): "
+        << (pricingHeur1 ? "enabled" : "disabled")
+        << ", max columns: " << pricingHeur1MaxNCols << std::endl;
+    out << "Pricing heuristic 2 (MWSSP I): "
+        << (pricingHeur2 ? "enabled" : "disabled") << std::endl;
+    out << "Pricing heuristic 3 (MWSSP II): "
+        << (pricingHeur3 ? "enabled" : "disabled") << std::endl;
+    out << "Pricing order: " << pricingOrder << std::endl;
+    out << "Pricing exact time limit: " << pricingExactTimeLimit << " seconds"
+        << std::endl;
+  }
 };
 
 #endif // _PARAMS_HPP_

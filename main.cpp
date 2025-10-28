@@ -230,6 +230,10 @@ int main(int argc, const char **argv) {
                                               outDirs["col"].string())
                                      : Output();
 
+      // Print params
+      params.print_params(out.logFile);
+      out.logFile << std::endl;
+
       // Solve the instance
       Stats stats;
       Col col;
