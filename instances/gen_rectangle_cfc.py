@@ -183,7 +183,7 @@ def main():
     for i in range(ninstances):
         rectangles = gen_rectangles(side, nrectangles, width, height, real=real, seed=i)
         num_vertices, num_edges, edges = build_hypergraph(rectangles)
-        name = f"rect_{nrectangles}_{width}_{height}_{i}"
+        name = f"rect_n{nrectangles}_w{width}_h{height}_i{i}"
         write_hypergraph(
             out + "/" + name + ".cfc",
             (num_vertices, num_edges, edges),
