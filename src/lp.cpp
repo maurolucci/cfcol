@@ -313,8 +313,8 @@ LP_STATE LP::optimize(double timelimit, double ub, Stats &stats) {
       // If dummy column is in the basis and the objective value is greater
       // than W, then the instance is infeasible
       if (values[0] > EPSILON && objVal > std::min(in.nA, in.nB) + EPSILON) {
-        log << "# infeasible instance detected after pricing" << std::endl;
         state = LP_INFEASIBLE;
+        stats.ninfeasAux++;
       }
       // Otherwise, the initialization failed
       else if (values[0] > EPSILON) {
@@ -345,8 +345,10 @@ LP_STATE LP::optimize(double timelimit, double ub, Stats &stats) {
       if (state == LP_FRACTIONAL) {
         // Find branching variable
         branchVar = get_branching_variable(values);
-      } else if (state == LP_INTEGER)
+      } else if (state == LP_INTEGER) {
         objVal = posVars.size();
+        stats.nint++;
+      }
     }
 
     values.end();
