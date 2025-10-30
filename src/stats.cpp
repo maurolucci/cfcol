@@ -33,9 +33,9 @@ void Stats::write_stats(std::ostream &file) {
        << nedges << "," << nA << "," << nB << "," << nvars << "," << ncons
        << "," << get_state_as_str() << "," << time << "," << nodes << ","
        << nodesLeft << "," << lb << "," << ub << "," << gap << ","
-       << ninfeasPrepro + ninfeasCheck << "," << ninfeasPrepro << ","
-       << ninfeasCheck << "," << ngcp << "," << gcpTime / (ngcp > 0 ? ngcp : 1)
-       << std::endl;
+       << ninfeasPrepro + ninfeasCheck + ninfeasAux << "," << ninfeasPrepro
+       << "," << ninfeasCheck << "," << ninfeasAux << "," << nint << "," << ngcp
+       << "," << gcpTime / (ngcp > 0 ? ngcp : 1) << std::endl;
   file << rootlb << "," << rootub << "," << rootHeurTime << "," << rootFeasTime
        << ","
        << rootNCallsPool + rootNCallsHeur + rootNCallsMwis1 + rootNCallsMwis2 +
@@ -97,9 +97,10 @@ void Stats::print_stats(std::ostream &file) {
   file << "Lower bound: " << lb << std::endl;
   file << "Upper bound: " << ub << std::endl;
   file << "Gap: " << gap << std::endl;
-  file << "Infeasible nodes: " << ninfeasPrepro + ninfeasCheck << " (total), "
-       << ninfeasPrepro << " (preprocessing), " << ninfeasCheck << " (checking)"
-       << std::endl;
+  file << "Infeasible nodes: " << ninfeasPrepro + ninfeasCheck + ninfeasAux
+       << " (total), " << ninfeasPrepro << " (preprocessing), " << ninfeasCheck
+       << " (checking), " << ninfeasAux << " (auxiliary)" << std::endl;
+  file << "Integer nodes: " << nint << std::endl;
   file << "GCP nodes: " << ngcp << std::endl;
   file << "GCP avg time: " << gcpTime / (ngcp > 0 ? ngcp : 1) << std::endl;
   file << "Root node stats:" << std::endl;
