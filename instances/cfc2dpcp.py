@@ -8,7 +8,7 @@ parser.add_argument("nombre_base", help="Ruta base del archivo sin extensión .p
 args = parser.parse_args()
 
 nombre_base = args.nombre_base
-archivo = nombre_base + ".txt"
+archivo = nombre_base + ".cfc"
 
 # Lectura de la instancia PCP
 try:
