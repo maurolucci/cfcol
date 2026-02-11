@@ -96,13 +96,14 @@ int main(int argc, const char **argv) {
   desc.add_options()("pool", "use a pool of columns (currently unimplemented)");
   desc.add_options()("pricing-greedy-off",
                      "do not use greedy heuristic for pricing");
-  desc.add_options()("pricing-mwsp1-off",
-                     "do not use MWSSP I heuristic for pricing");
-  desc.add_options()("pricing-mwsp2-off",
-                     "do not use MWSSP II heuristic for pricing");
-  desc.add_options()("pricing-order", po::value<int>()->default_value(1),
-                     "order of pricing (1: pool -> greedy -> MWSSP I -> MWSSP "
-                     "II, 2: pool -> greedy -> MWSSP II -> MWSSP I)");
+  desc.add_options()("pricing-pq-mwsp-off",
+                     "do not use P,Q-MWSSP heuristic for pricing");
+  desc.add_options()("pricing-p-mwsp-off",
+                     "do not use P-MWSSP heuristic for pricing");
+  desc.add_options()(
+      "pricing-order", po::value<int>()->default_value(1),
+      "order of pricing (1: pool -> greedy -> P,Q-MWSSP -> P-MWSSP "
+      "II, 2: pool -> greedy -> P-MWSSP II -> P,Q-MWSSP)");
   desc.add_options()("pricing-greedy-max-cols",
                      po::value<size_t>()->default_value(1),
                      "maximum number of columns to add with greedy pricing");
@@ -154,8 +155,8 @@ int main(int argc, const char **argv) {
   params.preprocStep3 = !vm.count("preproc-off");
   params.usePool = vm.count("pool");
   params.pricingHeur1 = !vm.count("pricing-greedy-off");
-  params.pricingHeur2 = !vm.count("pricing-mwsp1-off");
-  params.pricingHeur3 = !vm.count("pricing-mwsp2-off");
+  params.pricingHeur2 = !vm.count("pricing-pq-mwsp-off");
+  params.pricingHeur3 = !vm.count("pricing-p-mwsp-off");
   params.pricingOrder = vm["pricing-order"].as<int>();
   params.pricingHeur1MaxNCols = vm["pricing-greedy-max-cols"].as<size_t>();
   params.pricingExactTimeLimit = vm["pricing-exact-time"].as<size_t>();

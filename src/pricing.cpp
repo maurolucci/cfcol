@@ -14,14 +14,24 @@ void ThresholdCallback::check_threshold(
       context.getCandidatePoint(y, valY);
       IloNumArray valWb(context.getEnv(), in.nB);
       context.getCandidatePoint(w, valWb);
+      for (size_t iB = 0; iB < in.nB; ++iB) {
+        if (valWb[iB] < 0.5)
+          continue;
+        // Postprocessing: force w_b \leq \sum_{v \in B^b} y_v
+        size_t sum_y = 0;
+        for (auto v : in.fst[iB])
+          if (valY[in.getId[v]] > 0.5)
+            sum_y += 1;
+        if (sum_y == 0)
+          valWb[iB] = 0.0;
+        else
+          stab.bs.insert(in.idB2TyB[iB]);
+      }
       for (auto v : boost::make_iterator_range(vertices(in.graph)))
         if (valY[in.getId[v]] > 0.5) {
           stab.stable.push_back(v);
           stab.as.insert(in.graph[v].first);
         }
-      for (size_t iB = 0; iB < in.nB; ++iB)
-        if (valWb[iB] > 0.5)
-          stab.bs.insert(in.idB2TyB[iB]);
       stab.cost = context.getCandidateObjective();
       // Abort execution
       context.abort();
@@ -98,32 +108,49 @@ void PricingEnv::exact_init() {
     restr.end();
   }
 
-  // (2) y_a_b + y_a'_b' <= 1, for all ((a,b),(a',b')) \in E such that a != a'
+  // (2) y_a_b + y_a'_b <= w_b, for all ((a,b),(a',b)) \in E such that a != a'
   for (auto e : boost::make_iterator_range(edges(in.graph))) {
     auto u = source(e, in.graph);
     auto v = target(e, in.graph);
     if (in.graph[u].first == in.graph[v].first)
       continue;
+    if (in.graph[u].second != in.graph[v].second)
+      continue;
     IloExpr restr(cxenv);
-    restr += y[in.getId[u]] + y[in.getId[v]];
-    cxcons.add(restr <= 1);
-    restr.end();
-  }
-
-  // (3) y_a_b <= w_b, for all (a,b) \in V
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
-    IloExpr restr(cxenv);
-    restr += y[in.getId[v]] - w[in.tyB2idB[in.graph[v].second]];
+    restr +=
+        y[in.getId[u]] + y[in.getId[v]] - w[in.tyB2idB[in.graph[u].second]];
     cxcons.add(restr <= 0);
     restr.end();
   }
 
-  // (4) w_b <= \sum_{v in V^b} y_v, for all b \in B
-  for (size_t iB = 0; iB < in.nB; ++iB) {
+  // (3) y_a_b + \sum_{b' != b: (a',b') \in N(a,b)} y_a'_b' <= 1, for all
+  // (a,b) \in V, a != a'
+  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
+    TypeA a = in.graph[v].first;
+    TypeB b = in.graph[v].second;
+    for (size_t a2 = 0; a2 < in.nA; ++a2) {
+      if (a2 == a)
+        continue;
+      std::list<Vertex> neighbors;
+      for (auto v2 : in.snd[a2])
+        if (in.graph[v2].second != b && edge(v, v2, in.graph).second)
+          neighbors.push_back(v2);
+      if (!neighbors.empty()) {
+        IloExpr restr(cxenv);
+        restr += y[in.getId[v]];
+        for (auto v2 : neighbors) {
+          restr += y[in.getId[v2]];
+        }
+        cxcons.add(restr <= 1);
+        restr.end();
+      }
+    }
+  }
+
+  // (4) y_a_b <= w_b, for all (a,b) \in V
+  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
     IloExpr restr(cxenv);
-    restr += w[iB];
-    for (auto v : in.fst[iB])
-      restr -= y[in.getId[v]];
+    restr += y[in.getId[v]] - w[in.tyB2idB[in.graph[v].second]];
     cxcons.add(restr <= 0);
     restr.end();
   }
@@ -193,7 +220,7 @@ int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
 }
 
 std::list<std::pair<StableEnv, PRICING_STATE>>
-PricingEnv::mwis1_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+PricingEnv::mwis_P_Q_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 
   // Initialize local variables
   COLORset *newsets = NULL;
@@ -311,7 +338,7 @@ PricingEnv::mwis1_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 }
 
 std::pair<StableEnv, PRICING_STATE>
-PricingEnv::mwis2_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+PricingEnv::mwis_P_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 
   // Initialize local variables
   COLORset *newsets = NULL;
@@ -342,7 +369,7 @@ PricingEnv::mwis2_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   // Assert for non-negative costs
   for (size_t i = 0; i < weights.size(); ++i) {
     if (weights[i] < 0) {
-      std::cerr << "Error: negative weight in mwis2_solve: w[" << i
+      std::cerr << "Error: negative weight in mwis_P_solve: w[" << i
                 << "] = " << weights[i] << std::endl;
       exit(1);
     }
@@ -416,20 +443,30 @@ PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   switch (cplex.getCplexStatus()) {
   case IloCplex::CplexStatus::OptimalTol:
   case IloCplex::CplexStatus::Optimal: {
-    // Exit witout abortion means that the optimal value is <= THRESHOLD = 1.1
+    // The optimal value is <= THRESHOLD = 1.1
     // Recover optimal solution
     IloNumArray valY(cxenv, num_vertices(in.graph));
     cplex.getValues(y, valY);
     IloNumArray valW(cxenv, in.nB);
     cplex.getValues(w, valW);
+    for (size_t iB = 0; iB < in.nB; ++iB) {
+      if (valW[iB] < 0.5)
+        continue;
+      // Postprocessing: force w_b \leq \sum_{v \in B^b} y_v
+      size_t sum_y = 0;
+      for (auto v : in.fst[iB])
+        if (valY[in.getId[v]] > 0.5)
+          sum_y += 1;
+      if (sum_y == 0)
+        valW[iB] = 0.0;
+      else
+        stab.bs.insert(in.idB2TyB[iB]);
+    }
     for (auto v : boost::make_iterator_range(vertices(in.graph)))
       if (valY[in.getId[v]] > 0.5) {
         stab.stable.push_back(v);
         stab.as.insert(in.graph[v].first);
       }
-    for (size_t iB = 0; iB < in.nB; ++iB)
-      if (valW[iB] > 0.5)
-        stab.bs.insert(in.idB2TyB[iB]);
     stab.cost = cplex.getBestObjValue();
     // Classify optimal solution
     if (stab.cost > 1 + PRICING_EPSILON)
@@ -440,7 +477,7 @@ PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   case IloCplex::CplexStatus::AbortUser:
     // Exit with abortion means that the current value is > THRESHOLD = 1.1
     state = PRICING_STABLE_FOUND;
-    // Try to improve the stable set
+    // Try to maximalize the stable set
     for (Vertex v : boost::make_iterator_range(vertices(in.graph))) {
       auto [a, b, id] = in.graph[v];
       if (dualsA[in.tyA2idA[a]] < PRICING_EPSILON || stab.as.contains(a))

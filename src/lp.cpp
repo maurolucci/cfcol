@@ -423,14 +423,15 @@ int LP::pricing_greedy(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
   return nHeurCols;
 }
 
-// MWSSP heuristic I: the weight of (a,b) is \gamma_a - \mu_b
-int LP::pricing_mwss1(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                      IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot) {
+// P,Q-MWSSP heuristic: the weight of (a,b) is \gamma_a - \mu_b
+int LP::pricing_P_Q_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
+                         IloNumArray &dualsA, IloNumArray &dualsB,
+                         bool isRoot) {
   if (!params.pricingHeur2)
     return 0;
   auto startTime = std::chrono::high_resolution_clock::now();
   size_t nMwis1Cols = 0;
-  auto res = penv.mwis1_solve(dualsA, dualsB);
+  auto res = penv.mwis_P_Q_solve(dualsA, dualsB);
   for (auto &[stab, priState] : res) {
     if (priState == PRICING_STABLE_FOUND) {
       add_column(cenv, stab);
@@ -455,14 +456,14 @@ int LP::pricing_mwss1(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
   return nMwis1Cols;
 }
 
-// MWSSP heuristic II: the weight of (a,b) is \gamma_a
-int LP::pricing_mwss2(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                      IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot) {
+// P-MWSSP heuristic: the weight of (a,b) is \gamma_a
+int LP::pricing_P_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
+                       IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot) {
   if (!params.pricingHeur3)
     return 0;
   int ret;
   auto startTime = std::chrono::high_resolution_clock::now();
-  auto res = penv.mwis2_solve(dualsA, dualsB);
+  auto res = penv.mwis_P_solve(dualsA, dualsB);
   if (res.second == PRICING_STABLE_FOUND) {
     add_column(cenv, res.first);
     ret = 1;
@@ -541,23 +542,23 @@ int LP::pricing(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
     return addedCols;
 
   if (params.pricingOrder == 1) {
-    // Third, MWSSP heuristic I
-    addedCols = pricing_mwss1(cenv, penv, stats, dualsA, dualsB, isRoot);
+    // Third, P,Q-MWSSP heuristic
+    addedCols = pricing_P_Q_mwss(cenv, penv, stats, dualsA, dualsB, isRoot);
     if (addedCols > 0)
       return addedCols;
 
-    // Fourth, MWSSP heuristic II
-    addedCols = pricing_mwss2(cenv, penv, stats, dualsA, dualsB, isRoot);
+    // Fourth, P-MWSSP heuristic
+    addedCols = pricing_P_mwss(cenv, penv, stats, dualsA, dualsB, isRoot);
     if (addedCols >= 0)
       return addedCols;
   } else {
-    // Fourth, MWSSP heuristic II
-    addedCols = pricing_mwss2(cenv, penv, stats, dualsA, dualsB, isRoot);
+    // Third, P-MWSSP heuristic
+    addedCols = pricing_P_mwss(cenv, penv, stats, dualsA, dualsB, isRoot);
     if (addedCols >= 0)
       return addedCols;
 
-    // Third, MWSSP heuristic I
-    addedCols = pricing_mwss1(cenv, penv, stats, dualsA, dualsB, isRoot);
+    // Third, P,Q-MWSSP heuristic
+    addedCols = pricing_P_Q_mwss(cenv, penv, stats, dualsA, dualsB, isRoot);
     if (addedCols > 0)
       return addedCols;
   }

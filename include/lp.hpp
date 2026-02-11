@@ -118,10 +118,10 @@ private:
                    IloNumArray &dualsB, bool isRoot);
   int pricing_greedy(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
                      IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
-  int pricing_mwss1(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                    IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
-  int pricing_mwss2(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                    IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
+  int pricing_P_Q_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
+                       IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
+  int pricing_P_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
+                     IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
   int pricing_exact(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
                     IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
 

@@ -18,15 +18,19 @@ struct Params {
   //    0: no heuristic
   //    1: greedy 1-step heuristic
   //    2: greedy 2-step heuristic
-  //    3: semi-greedy 2-step heuristic
+  //    3: semi-greedy 2-step heuristic (default)
   // heuristicRootIter: number of iterations for semi-greedy heuristic
   // heuristicOtherNodes: type of heuristic for other nodes
   //    0: no heuristic
   //    1: greedy 1-step heuristic
-  //    2: greedy 2-step heuristic
+  //    2: greedy 2-step heuristic (default)
   //    3: semi-greedy 2-step heuristic
   // heuristicOtherIter: number of iterations for semi-greedy heuristic
   // heuristic2stepVariant: variant of the 2-step heuristic
+  //    0: DEG-REAL
+  //    1: DEG-Q
+  //    2: DEG-COLLAPSED
+  //    3: EDGE (default)
   int heuristicRootNode;
   size_t heuristicRootIter;
   int heuristicOtherNodes;
@@ -55,7 +59,7 @@ struct Params {
   // inheritColumns: type of column inheritance from parent
   //     0: no inheritance
   //     1: inherit all columns
-  //     2: inherit only basic columns
+  //     2: inherit only positive columns
   // initializationBigWeight: weight of dummy column during initialization
   int inheritColumns;
   double initializationBigWeight;
@@ -74,11 +78,11 @@ struct Params {
 
   // Pricing options
   // pricingHeur1: use greedy heuristic for pricing
-  // pricingHeur2: use MWSSP I heuristic for pricing
-  // pricingHeur3: use MWSSP II heuristic for pricing
+  // pricingHeur2: use P,Q-MWSSP heuristic for pricing
+  // pricingHeur3: use P-MWSSP heuristic for pricing
   // pricingOrder: order of pricing
-  //    1: pool -> greedy -> MWSSP I -> MWSSP II
-  //    2: pool -> greedy -> MWSSP II -> MWSSP I
+  //    1: pool -> greedy -> P,Q-MWSSP -> P-MWSSP
+  //    2: pool -> greedy -> P-MWSSP -> P,Q-MWSSP
   // pricingHeur1MaxNCols: maximum number of columns to add with pricingHeur1
   // pricingExactTimeLimit: time limit for exact pricing (in seconds)
   bool pricingHeur1;
@@ -102,31 +106,96 @@ struct Params {
         pricingHeur1MaxNCols(1), pricingExactTimeLimit(300),
         branchingFMS(false){};
 
+  std::string get_heur_name(int heur) {
+    switch (heur) {
+    case 0:
+      return " (none)";
+    case 1:
+      return " (greedy 1-step)";
+    case 2:
+      return " (greedy 2-step)";
+    case 3:
+      return " (semi-greedy 2-step)";
+    default:
+      return " (unknown)";
+    }
+  };
+
+  std::string get_heur_variant(int variant) {
+    switch (variant) {
+    case 0:
+      return " (deg-real)";
+    case 1:
+      return " (deg-Q)";
+    case 2:
+      return " (deg-collapsed)";
+    case 3:
+      return " (edge)";
+    default:
+      return " (unknown)";
+    }
+  };
+
+  std::string get_feas_name(int feas) {
+    switch (feas) {
+    case 0:
+      return " (none)";
+    case 1:
+      return " (enumerative)";
+    case 2:
+      return " (ilp)";
+    default:
+      return " (unknown)";
+    }
+  };
+
+  std::string get_inherit_name(int inherit) {
+    switch (inherit) {
+    case 0:
+      return " (none)";
+    case 1:
+      return " (all)";
+    case 2:
+      return " (positive)";
+    default:
+      return " (unknown)";
+    }
+  };
+
   void print_params(std::ostream &out) {
     out << "*** Parameters ***:" << std::endl;
     out << "Time limit: " << timeLimit << " seconds" << std::endl;
     out << "DFS strategy: " << (dfs ? "enabled" : "disabled") << std::endl;
     out << "Only relaxation: " << (onlyRelaxation ? "enabled" : "disabled")
         << std::endl;
-    out << "Heuristic root node: " << heuristicRootNode;
+    out << "Heuristic root node: " << heuristicRootNode
+        << get_heur_name(heuristicRootNode);
     if (heuristicRootNode == 2 || heuristicRootNode == 3)
-      out << ", variant: " << heuristic2stepVariant;
+      out << ", variant: " << heuristic2stepVariant
+          << get_heur_variant(heuristic2stepVariant);
     if (heuristicRootNode == 3)
       out << ", iterations: " << heuristicRootIter;
     out << std::endl;
-    out << "Heuristic other nodes: " << heuristicOtherNodes;
+    out << "Heuristic other nodes: " << heuristicOtherNodes
+        << get_heur_name(heuristicOtherNodes);
     if (heuristicRootNode == 2 || heuristicRootNode == 3)
-      out << ", variant: " << heuristic2stepVariant;
+      out << ", variant: " << heuristic2stepVariant
+          << get_heur_variant(heuristic2stepVariant);
     if (heuristicOtherNodes == 3)
       out << ", iterations: " << heuristicOtherIter;
     out << std::endl;
     out << "Feasibility root node: " << feasibilityRootNode
-        << ", time limit: " << feasibilityRootNodeTimeLimit << " seconds"
-        << std::endl;
+        << get_feas_name(feasibilityRootNode);
+    if (feasibilityRootNode == 2)
+      out << ", time limit: " << feasibilityRootNodeTimeLimit << " seconds";
+    out << std::endl;
     out << "Feasibility other nodes: " << feasibilityOtherNodes
-        << ", time limit: " << feasibilityOtherNodesTimeLimit << " seconds"
-        << std::endl;
-    out << "Inherit columns: " << inheritColumns << std::endl;
+        << get_feas_name(feasibilityOtherNodes);
+    if (feasibilityOtherNodes == 2)
+      out << ", time limit: " << feasibilityOtherNodesTimeLimit << " seconds";
+    out << std::endl;
+    out << "Inherit columns: " << inheritColumns
+        << get_inherit_name(inheritColumns) << std::endl;
     out << "Initialization big weight: " << initializationBigWeight
         << std::endl;
     out << "Preprocessing step 1 (clique V_a): "
@@ -140,9 +209,9 @@ struct Params {
     out << "Pricing heuristic 1 (greedy): "
         << (pricingHeur1 ? "enabled" : "disabled")
         << ", max columns: " << pricingHeur1MaxNCols << std::endl;
-    out << "Pricing heuristic 2 (MWSSP I): "
+    out << "Pricing heuristic 2 (P,Q-MWSSP): "
         << (pricingHeur2 ? "enabled" : "disabled") << std::endl;
-    out << "Pricing heuristic 3 (MWSSP II): "
+    out << "Pricing heuristic 3 (P-MWSSP): "
         << (pricingHeur3 ? "enabled" : "disabled") << std::endl;
     out << "Pricing order: " << pricingOrder << std::endl;
     out << "Pricing exact time limit: " << pricingExactTimeLimit << " seconds"

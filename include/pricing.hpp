@@ -87,9 +87,9 @@ public:
   heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, double alpha = 0.1);
 
   std::list<std::pair<StableEnv, PRICING_STATE>>
-  mwis1_solve(IloNumArray &dualsA, IloNumArray &dualsB);
-  std::pair<StableEnv, PRICING_STATE> mwis2_solve(IloNumArray &dualsA,
-                                                  IloNumArray &dualsB);
+  mwis_P_Q_solve(IloNumArray &dualsA, IloNumArray &dualsB);
+  std::pair<StableEnv, PRICING_STATE> mwis_P_solve(IloNumArray &dualsA,
+                                                   IloNumArray &dualsB);
 
   std::pair<StableEnv, PRICING_STATE> exact_solve(IloNumArray &dualsA,
                                                   IloNumArray &dualsB);
