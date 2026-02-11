@@ -798,11 +798,10 @@ void LP::heuristic(Stats &stats, Params &params) {
   if (heur == 1)
     stats = dpcp_1_step_greedy_heur(in, initSol);
   else if (heur == 2)
-    stats = dpcp_1_step_semigreedy_heur(in, initSol, iters);
+    stats = dpcp_2_step_greedy_heur(in, initSol, params.heuristic2stepVariant);
   else if (heur == 3)
-    stats = dpcp_2_step_greedy_heur(in, initSol);
-  else if (heur == 4)
-    stats = dpcp_2_step_semigreedy_heur(in, initSol, iters);
+    stats = dpcp_2_step_semigreedy_heur(in, initSol, iters,
+                                        params.heuristic2stepVariant);
   return;
 }
 

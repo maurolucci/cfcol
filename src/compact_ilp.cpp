@@ -21,12 +21,11 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
     stats = dpcp_1_step_greedy_heur(genv, initialCol);
   else if (params.heuristicRootNode == 2)
     stats =
-        dpcp_1_step_semigreedy_heur(genv, initialCol, params.heuristicRootIter);
+        dpcp_2_step_greedy_heur(genv, initialCol, params.heuristic2stepVariant);
   else if (params.heuristicRootNode == 3)
-    stats = dpcp_2_step_greedy_heur(genv, initialCol);
-  else if (params.heuristicRootNode == 4)
     stats =
-        dpcp_2_step_semigreedy_heur(genv, initialCol, params.heuristicRootIter);
+        dpcp_2_step_semigreedy_heur(genv, initialCol, params.heuristicRootIter,
+                                    params.heuristic2stepVariant);
 
   // Save initial solution stats
   if (params.heuristicRootNode >= 1 && params.heuristicRootNode <= 4) {

@@ -17,21 +17,21 @@ struct Params {
   // heuristicRootNode: type of heuristic for the root node
   //    0: no heuristic
   //    1: greedy 1-step heuristic
-  //    2: semi-greedy 1-step heuristic
-  //    3: greedy 2-step heuristic
-  //    4: semi-greedy 2-step heuristic
+  //    2: greedy 2-step heuristic
+  //    3: semi-greedy 2-step heuristic
   // heuristicRootIter: number of iterations for semi-greedy heuristic
   // heuristicOtherNodes: type of heuristic for other nodes
   //    0: no heuristic
   //    1: greedy 1-step heuristic
-  //    2: semi-greedy 1-step heuristic
-  //    3: greedy 2-step heuristic
-  //    4: semi-greedy 2-step heuristic
+  //    2: greedy 2-step heuristic
+  //    3: semi-greedy 2-step heuristic
   // heuristicOtherIter: number of iterations for semi-greedy heuristic
+  // heuristic2stepVariant: variant of the 2-step heuristic
   int heuristicRootNode;
   size_t heuristicRootIter;
   int heuristicOtherNodes;
   size_t heuristicOtherIter;
+  size_t heuristic2stepVariant;
 
   // Feasibility check options
   // feasibilityRootNode: type of feasibility check for the root node
@@ -91,14 +91,15 @@ struct Params {
   bool branchingFMS;
 
   Params()
-      : timeLimit(900), dfs(false), onlyRelaxation(false), heuristicRootNode(4),
-        heuristicRootIter(100), heuristicOtherNodes(3), heuristicOtherIter(50),
-        feasibilityRootNode(2), feasibilityRootNodeTimeLimit(300),
-        feasibilityOtherNodes(2), feasibilityOtherNodesTimeLimit(60),
-        inheritColumns(0), initializationBigWeight(1000.0), preprocStep1(true),
-        preprocStep2(true), preprocStep3(true), usePool(false),
-        pricingHeur1(true), pricingHeur2(true), pricingHeur3(true),
-        pricingOrder(1), pricingHeur1MaxNCols(1), pricingExactTimeLimit(300),
+      : timeLimit(900), dfs(false), onlyRelaxation(false), heuristicRootNode(3),
+        heuristicRootIter(100), heuristicOtherNodes(2), heuristicOtherIter(50),
+        heuristic2stepVariant(3), feasibilityRootNode(2),
+        feasibilityRootNodeTimeLimit(300), feasibilityOtherNodes(2),
+        feasibilityOtherNodesTimeLimit(60), inheritColumns(0),
+        initializationBigWeight(1000.0), preprocStep1(true), preprocStep2(true),
+        preprocStep3(true), usePool(false), pricingHeur1(true),
+        pricingHeur2(true), pricingHeur3(true), pricingOrder(1),
+        pricingHeur1MaxNCols(1), pricingExactTimeLimit(300),
         branchingFMS(false){};
 
   void print_params(std::ostream &out) {
@@ -108,11 +109,15 @@ struct Params {
     out << "Only relaxation: " << (onlyRelaxation ? "enabled" : "disabled")
         << std::endl;
     out << "Heuristic root node: " << heuristicRootNode;
-    if (heuristicRootNode == 2 || heuristicRootNode == 4)
+    if (heuristicRootNode == 2 || heuristicRootNode == 3)
+      out << ", variant: " << heuristic2stepVariant;
+    if (heuristicRootNode == 3)
       out << ", iterations: " << heuristicRootIter;
     out << std::endl;
     out << "Heuristic other nodes: " << heuristicOtherNodes;
-    if (heuristicOtherNodes == 2 || heuristicOtherNodes == 4)
+    if (heuristicRootNode == 2 || heuristicRootNode == 3)
+      out << ", variant: " << heuristic2stepVariant;
+    if (heuristicOtherNodes == 3)
       out << ", iterations: " << heuristicOtherIter;
     out << std::endl;
     out << "Feasibility root node: " << feasibilityRootNode

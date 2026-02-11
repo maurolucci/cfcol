@@ -60,19 +60,20 @@ int main(int argc, const char **argv) {
   desc.add_options()("relax", "solve only the root node");
   desc.add_options()("ub", po::value<double>()->default_value(DBL_MAX),
                      "initial upper bound on the optimal solution value");
-  desc.add_options()("heur-root", po::value<int>()->default_value(4),
-                     "type of heuristic for the root node (0: no heuristic, "
-                     "1: greedy 1-step, 2: semi-greedy 1-step, 3: greedy "
-                     "2-step, 4: semi-greedy 2-step)");
+  desc.add_options()(
+      "heur-root", po::value<int>()->default_value(3),
+      "type of heuristic for the root node (0: no heuristic, "
+      "1: greedy 1-step, 2: greedy 2-step, 3: semi-greedy 2-step)");
   desc.add_options()("heur-root-iter", po::value<size_t>()->default_value(100),
                      "number of iterations for the root heuristic");
-  desc.add_options()(
-      "heur-nodes", po::value<int>()->default_value(3),
-      "type of heuristic for other nodes (0: no heuristic, 1: "
-      "greedy 1-step, 2: semi-greedy 1-step, 3: greedy 2-step, 4: "
-      "semi-greedy 2-step)");
+  desc.add_options()("heur-nodes", po::value<int>()->default_value(2),
+                     "type of heuristic for other nodes (0: no heuristic, 1: "
+                     "greedy 1-step, 2: greedy 2-step, 3: semi-greedy 2-step)");
   desc.add_options()("heur-nodes-iter", po::value<size_t>()->default_value(50),
                      "number of iterations for the other nodes heuristic");
+  desc.add_options()("heur-2step-variant",
+                     po::value<size_t>()->default_value(3),
+                     "variant of the 2-step heuristic");
   desc.add_options()("feas-root", po::value<int>()->default_value(2),
                      "type of feasibility check for the root node (0: no "
                      "check, 1: enumerative, 2: ILP)");
@@ -141,6 +142,7 @@ int main(int argc, const char **argv) {
   params.heuristicRootIter = vm["heur-root-iter"].as<size_t>();
   params.heuristicOtherNodes = vm["heur-nodes"].as<int>();
   params.heuristicOtherIter = vm["heur-nodes-iter"].as<size_t>();
+  params.heuristic2stepVariant = vm["heur-2step-variant"].as<size_t>();
   params.feasibilityRootNode = vm["feas-root"].as<int>();
   params.feasibilityRootNodeTimeLimit = vm["feas-root-time"].as<int>();
   params.feasibilityOtherNodes = vm["feas-nodes"].as<int>();
