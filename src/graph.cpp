@@ -147,7 +147,7 @@ GraphEnv::GraphEnv(Graph *graph, bool preprocess1, bool preprocess2,
                    bool preprocess3, bool preprocess4, bool isRoot)
     : graphPtr(graph), graph(*graph), getId(), nA(0), nB(0), tyA2idA(),
       tyB2idB(), idA2TyA(), idB2TyB(), snd(), fst(), isRoot(isRoot),
-      isGCP(true), isInfeasible(false), isolated() {
+      isGCP(true), isInfeasible(false), hasTrivialSolution(false), isolated() {
   // First, apply preprocessing
   preprocess(preprocess1, preprocess2, preprocess3, preprocess4);
   // Then, initialize the other struct members
