@@ -214,7 +214,7 @@ int main(int argc, const char **argv) {
 
       // Get name for the current run
       fs::path currentName(path.stem().string() + "-" + solver + "-" +
-                           std::to_string(run));
+                           std::to_string(run) + ".txt");
       if (vm.count("out")) {
 
         // Set output file names
