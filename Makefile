@@ -5,7 +5,7 @@ LIBFORMAT  = static_pic
 CC = g++ -std=c++20
 
 CCOPT = -O3 -fPIC -fno-strict-aliasing -fexceptions -Wall -g
-CCINFLAGS =  -I include/ -I hglib/include/ -I hglib/lib/filtered_vector/include/  -I exactcolors/
+CCINFLAGS =  -I include/ -I exactcolors/
 
 CPLEXDIR      = /opt/ibm/ILOG/CPLEX_Studio2211/cplex
 CONCERTDIR    = /opt/ibm/ILOG/CPLEX_Studio2211/concert
@@ -21,7 +21,7 @@ CPLEXLIBFLAGS = -L$(CPLEXLIBDIR) -L$(CONCERTLIBDIR)
 CPLEXLNFLAGS = -lconcert -lilocplex -lcplex -ldl 
 
 
-all: dpcp test
+all: dpcp
 
 stats.o: src/stats.cpp include/stats.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS)
@@ -64,18 +64,6 @@ exactcolors/mwis_grdy.o exactcolors/heap.o \
 exactcolors/mwis.o exactcolors/mwis_sewell/mwss_ext.o \
 exactcolors/mwis_sewell/wstable.o exactcolors/color_backup.o exactcolors/greedy.o
 	$(CC) -o $@ $^ $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS) $(BOOSTLIB)
-
-test.o: test_heur.cpp include/heur.hpp include/graph.hpp include/col.hpp include/stats.hpp
-	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS)
-
-test: test.o heur.o graph.o col.o stats.o \
-exactcolors/color.o exactcolors/color_version.h exactcolors/util.o \
-exactcolors/rounding_mode.o exactcolors/cliq_enum.o exactcolors/color_parms.o \
-exactcolors/graph.o exactcolors/lpcplex.o exactcolors/bbsafe.o \
-exactcolors/mwis_grdy.o exactcolors/heap.o \
-exactcolors/mwis.o exactcolors/mwis_sewell/mwss_ext.o \
-exactcolors/mwis_sewell/wstable.o exactcolors/color_backup.o exactcolors/greedy.o
-	$(CC) -o $@ $^ $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
 
 clean:
 	rm -f *.o dpcp test
