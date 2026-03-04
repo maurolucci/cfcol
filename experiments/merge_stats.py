@@ -18,8 +18,8 @@ def main() -> int:
         "run",
         "nvertices",
         "nedges",
-        "nA",
-        "nB",
+        "n",
+        "m",
         "nvars",
         "ncons",
         "state",
@@ -40,8 +40,6 @@ def main() -> int:
         "nsolHeur",
         "nsolLR",
         "ntrivial",
-        "bestTime",
-        "bestIter",
         "rootlb",
         "rootub",
         "rootHeurTime",
@@ -124,9 +122,7 @@ def main() -> int:
                     int(l0[24]),  # nsolHeur
                     int(l0[25]),  # nsolLR
                     int(l0[26]),  # ntrivial
-                    float(l0[27]),  # bestTime
-                    int(l0[28]),
-                ]  # bestIter
+                ]
 
                 # second line
                 l1 = f.readline().strip().split(",")

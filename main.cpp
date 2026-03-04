@@ -244,9 +244,39 @@ int main(int argc, const char **argv) {
       params.print_params(out.logFile);
       out.logFile << std::endl;
 
+      // Coloring
+      Col col;
+
+      // Polymorphic output handling
+      auto handle_output = [&](Stats &stats) {
+        // Complete stats
+        stats.solver = solver;
+        stats.instance = path.stem().string();
+        stats.run = static_cast<int>(run);
+        stats.nvertices = static_cast<int>(num_vertices(graph));
+        stats.nedges = static_cast<int>(num_edges(graph));
+        stats.nA = static_cast<int>(nA);
+        stats.nB = static_cast<int>(nB);
+
+        // Write stats
+        if (vm.count("out")) {
+          std::ofstream statFile(outDirs["stat"].string(), std::ofstream::app);
+          stats.write_stats(statFile);
+          stats.print_stats(out.logFile);
+        } else
+          stats.print_stats(std::cout);
+        stats.write_stats(std::cout);
+        out.logFile << std::endl;
+
+        // Write coloring
+        if (stats.state == OPTIMAL || stats.state == FEASIBLE) {
+          std::ofstream solFile(outDirs["sol"].string(), std::ofstream::app);
+          col.write_coloring(graph, solFile);
+        }
+      };
+
       // Solve the instance
       Stats stats;
-      Col col;
       if (solver == "byp") {
         out.logFile << "Solving instance " << path << " with B&P" << std::endl;
         Graph *gcopy = new Graph;
@@ -265,16 +295,17 @@ int main(int argc, const char **argv) {
                     << std::endl;
         GraphEnv genv(&graph, params.preprocStep1, params.preprocStep2,
                       params.preprocStep3, params.preprocStep4, false);
+        HeurStats heurStats;
         switch (params.heuristicRootNode) {
         case 1:
-          stats = dpcp_1_step_greedy_heur(genv, col);
+          heurStats = dpcp_1_step_greedy_heur(genv, col);
           break;
         case 2:
-          stats =
+          heurStats =
               dpcp_2_step_greedy_heur(genv, col, params.heuristic2stepVariant);
           break;
         case 3:
-          stats =
+          heurStats =
               dpcp_2_step_semigreedy_heur(genv, col, params.heuristicRootIter,
                                           params.heuristic2stepVariant);
           break;
@@ -283,6 +314,8 @@ int main(int argc, const char **argv) {
                     << params.heuristicRootNode << std::endl;
           return 2;
         }
+        handle_output(heurStats);
+        return 0;
       } else if (solver == "feas-enum") {
         out.logFile << "Deciding feasibility of instance " << path
                     << " with enumerative method" << std::endl;
@@ -300,30 +333,8 @@ int main(int argc, const char **argv) {
         return 2;
       }
 
-      // Complete stats
-      stats.solver = solver;
-      stats.instance = path.stem().string();
-      stats.run = static_cast<int>(run);
-      stats.nvertices = static_cast<int>(num_vertices(graph));
-      stats.nedges = static_cast<int>(num_edges(graph));
-      stats.nA = static_cast<int>(nA);
-      stats.nB = static_cast<int>(nB);
-
-      // Write stats
-      if (vm.count("out")) {
-        std::ofstream statFile(outDirs["stat"].string(), std::ofstream::app);
-        stats.write_stats(statFile);
-        stats.print_stats(out.logFile);
-      } else
-        stats.print_stats(std::cout);
-      stats.write_stats(std::cout);
-      out.logFile << std::endl;
-
-      // Write coloring
-      if (stats.state == OPTIMAL || stats.state == FEASIBLE) {
-        std::ofstream solFile(outDirs["sol"].string(), std::ofstream::app);
-        col.write_coloring(solFile);
-      }
+      // Handle output
+      handle_output(stats);
     }
   }
   return 0;

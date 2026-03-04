@@ -330,10 +330,11 @@ void dpcp_dsatur_heur(const GraphEnv &genv, VertexVector &selected,
 }
 
 // General two-step greedy heuristic for DPCP
-Stats dpcp_2_step_greedy_heur(const GraphEnv &genv, Col &col, size_t variant) {
+HeurStats dpcp_2_step_greedy_heur(const GraphEnv &genv, Col &col,
+                                  size_t variant) {
 
   TimePoint start = ClockType::now();
-  Stats stats;
+  HeurStats stats;
 
   // First step
   VertexVector selected;                // Vector of selected vertices
@@ -342,32 +343,34 @@ Stats dpcp_2_step_greedy_heur(const GraphEnv &genv, Col &col, size_t variant) {
   bool success =
       first_step(genv, selected, adj, variant, greedy_vertex_selector);
   if (!success) {
-    stats.state = INFEASIBLE;
+    stats.state = UNKNOWN;
   } else {
     // Second step
     dpcp_dsatur_heur(genv, selected, adj, col);
     assert(col.check_coloring(genv.graph));
     stats.state = FEASIBLE;
-    stats.ub = static_cast<double>(col.get_n_colors());
+    stats.value = static_cast<double>(col.get_n_colors());
     stats.bestTime =
         std::chrono::duration<double>(ClockType::now() - start).count();
     stats.bestIter = 0;
   }
 
   TimePoint end = ClockType::now();
-  stats.time = std::chrono::duration<double>(end - start).count();
+  stats.totalTime = std::chrono::duration<double>(end - start).count();
+  stats.totalIters = 1;
 
   return stats;
 }
 
 // General two-step semigreedy heuristic for DPCP
-Stats dpcp_2_step_semigreedy_heur(const GraphEnv &genv, Col &col, size_t nIters,
-                                  size_t variant) {
+// Stopping criterion: if no improvement after nIters iterations
+HeurStats dpcp_2_step_semigreedy_heur(const GraphEnv &genv, Col &col,
+                                      size_t nIters, size_t variant) {
 
   TimePoint start = ClockType::now();
-  Stats stats;
-
-  for (size_t i = 0; i < nIters; ++i) {
+  HeurStats stats;
+  size_t totalIters = 0;
+  for (size_t i = 0; i < nIters; ++i, ++totalIters) {
 
     // First step
     VertexVector selected;                // Vector of selected vertices
@@ -386,21 +389,24 @@ Stats dpcp_2_step_semigreedy_heur(const GraphEnv &genv, Col &col, size_t nIters,
         col = newCol;
         stats.bestTime =
             std::chrono::duration<double>(ClockType::now() - start).count();
-        stats.bestIter = i;
+        stats.bestIter = totalIters;
+        i = 0;
       }
     }
   }
 
+  stats.totalIters = totalIters;
+
   if (col.get_n_colors() == 0) {
-    stats.state = INFEASIBLE;
+    stats.state = UNKNOWN;
   } else {
     assert(col.check_coloring(genv.graph));
     stats.state = FEASIBLE;
-    stats.ub = static_cast<double>(col.get_n_colors());
+    stats.value = static_cast<double>(col.get_n_colors());
   }
 
   TimePoint end = ClockType::now();
-  stats.time = std::chrono::duration<double>(end - start).count();
+  stats.totalTime = std::chrono::duration<double>(end - start).count();
 
   return stats;
 }
@@ -655,16 +661,17 @@ bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
 }
 
 // One-step heuristic for DPCP
-Stats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
+HeurStats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
   TimePoint start = ClockType::now();
-  Stats stats;
+  HeurStats stats;
 
   bool success = single_step(genv, col, true);
 
   if (!success) {
     TimePoint end = ClockType::now();
-    stats.state = INFEASIBLE;
-    stats.time = std::chrono::duration<double>(end - start).count();
+    stats.state = UNKNOWN;
+    stats.totalTime = std::chrono::duration<double>(end - start).count();
+    stats.totalIters = 1;
     return stats;
   }
 
@@ -672,9 +679,10 @@ Stats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
 
   TimePoint end = ClockType::now();
   stats.state = FEASIBLE;
-  stats.time = std::chrono::duration<double>(end - start).count();
-  stats.ub = static_cast<double>(col.get_n_colors());
-  stats.bestTime = stats.time;
+  stats.totalTime = std::chrono::duration<double>(end - start).count();
+  stats.value = static_cast<double>(col.get_n_colors());
+  stats.totalIters = 1;
+  stats.bestTime = stats.totalTime;
   stats.bestIter = 0;
 
   return stats;

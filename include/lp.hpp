@@ -87,7 +87,7 @@ private:
   // std::vector<int> invVertexMap;
 
   // Heuristic solution of the DPCP instances at the current node
-  void heuristic(Stats &stats, Params &params);
+  void heuristic(HeurStats &stats, Params &params);
 
   // Check the feasibility of the DPCP instance at the current node
   void feasibility_check(Stats &stats, Params &params);

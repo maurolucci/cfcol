@@ -173,21 +173,22 @@ LP_STATE LP::optimize(double timelimit, double ub, Stats &stats) {
   }
 
   // Apply heuristic at the current node
-  Stats heurStats, feasStats;
+  HeurStats heurStats;
   heuristic(heurStats, params);
 
   // Update heuristic stats for the root node
   if (in.isRoot) {
-    stats.rootHeurTime = heurStats.time;
+    stats.rootHeurTime = heurStats.totalTime;
     if (heurStats.state == FEASIBLE)
-      stats.rootub = heurStats.ub;
+      stats.rootub = heurStats.value;
   }
   // Update heuristic stats for other nodes
   else {
-    stats.otherNodesHeurTime += heurStats.time;
+    stats.otherNodesHeurTime += heurStats.totalTime;
   }
 
   // If no solution was found, apply the feasibility check
+  Stats feasStats;
   if (initSol.get_n_colors() == 0) {
     feasibility_check(feasStats, params);
 
@@ -800,7 +801,7 @@ Vertex LP::get_branching_variable_FMS(const IloNumArray &values) {
 
 // Heuristic solution of the DPCP instances at the current node
 // The heuristic used is selected depending on the parameters
-void LP::heuristic(Stats &stats, Params &params) {
+void LP::heuristic(HeurStats &stats, Params &params) {
   int heur = isRoot ? params.heuristicRootNode : params.heuristicOtherNodes;
   int iters = isRoot ? params.heuristicRootIter : params.heuristicOtherIter;
   if (heur == 1)

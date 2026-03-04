@@ -37,7 +37,7 @@ void Stats::write_stats(std::ostream &file) {
        << "," << ninfeasCheck << "," << ninfeasAux << "," << nint << "," << ngcp
        << "," << gcpTime / (ngcp > 0 ? ngcp : 1) << ","
        << nsolHeur + nsolLR + ntrivial << "," << nsolHeur << "," << nsolLR
-       << "," << ntrivial << "," << bestTime << "," << bestIter << std::endl;
+       << "," << ntrivial << std::endl;
 
   file << rootlb << "," << rootub << "," << rootHeurTime << "," << rootFeasTime
        << ","
@@ -89,8 +89,8 @@ void Stats::print_stats(std::ostream &file) {
   file << "Run: " << run << std::endl;
   file << "Vertices: " << nvertices << std::endl;
   file << "Edges: " << nedges << std::endl;
-  file << "|A|: " << nA << std::endl;
-  file << "|B|: " << nB << std::endl;
+  file << "n: " << nA << std::endl;
+  file << "m: " << nB << std::endl;
   file << "Variables: " << nvars << std::endl;
   file << "Constraints: " << ncons << std::endl;
   file << "State: " << get_state_as_str() << std::endl;
@@ -109,8 +109,6 @@ void Stats::print_stats(std::ostream &file) {
   file << "Solutions found: " << nsolHeur + nsolLR + ntrivial << " (total), "
        << nsolHeur << " (heuristic), " << nsolLR << " (linear relaxation), "
        << ntrivial << " (trivial)" << std::endl;
-  file << "Best time: " << bestTime << std::endl;
-  file << "Best iteration: " << bestIter << std::endl;
   file << "Root node stats:" << std::endl;
   file << "\tLower bound: " << rootlb << std::endl;
   file << "\tUpper bound: " << rootub << std::endl;
@@ -173,4 +171,37 @@ void Stats::print_stats(std::ostream &file) {
        << otherNodesTimeMwis1 / onodes << " (MWIS1), "
        << otherNodesTimeMwis2 / onodes << " (MWIS2), "
        << otherNodesTimeExact / onodes << " (exact)" << std::endl;
+}
+
+std::string HeurStats::get_state_as_str() {
+  switch (state) {
+  case FEASIBLE:
+    return "FEASIBLE";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+void HeurStats::print_stats(std::ostream &file) {
+  file << std::endl << "*** Stats ***" << std::endl;
+  file << "Instance: " << instance << std::endl;
+  file << "Solver: " << solver << std::endl;
+  file << "Run: " << run << std::endl;
+  file << "Vertices: " << nvertices << std::endl;
+  file << "Edges: " << nedges << std::endl;
+  file << "n: " << nA << std::endl;
+  file << "m: " << nB << std::endl;
+  file << "State: " << get_state_as_str() << std::endl;
+  file << "Value: " << value << std::endl;
+  file << "Total Time: " << totalTime << std::endl;
+  file << "Total Iterations: " << totalIters << std::endl;
+  file << "Best Time: " << bestTime << std::endl;
+  file << "Best Iteration: " << bestIter << std::endl;
+}
+
+void HeurStats::write_stats(std::ostream &file) {
+  file << instance << "," << solver << "," << run << "," << nvertices << ","
+       << nedges << "," << nA << "," << nB << "," << get_state_as_str() << ","
+       << value << "," << totalTime << "," << totalIters << "," << bestTime
+       << "," << bestIter << std::endl;
 }
