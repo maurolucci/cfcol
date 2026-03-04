@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# exp1: Evaluate DPCP heuristics
+# exp1: Evaluate parameter ALPHA in the semigreedy heuristic
 
-declare -a HEURS=("greedy1s" "greedy2s" "semigreedy2s")
+declare -a HEURS=("semigreedy2s")
 declare -a VARIANTS=("2" "3")
-declare -a REPETITIONS=("10" "100" "1000" "10000" "100000")
+declare -a ALPHA=("0.1" "0.2" "0.3" "0.4")
 
 declare INPUT="../../instances/dpcp/random"
 declare INSTANCES="$INPUT/instances.txt"
@@ -26,9 +26,9 @@ do
         for v in "${VARIANTS[@]}"
         do
             mkdir -p "$OUT/$h/v$v"
-            for r in "${REPETITIONS[@]}"
+            for a in "${ALPHA[@]}"
             do
-                mkdir -p "$OUT/$h/v$v/r$r"
+                mkdir -p "$OUT/$h/v$v/a$a"
             done
         done
     fi
@@ -52,10 +52,10 @@ do
         elif [[ "$h" == "semigreedy2s" ]]; then
             for v in "${VARIANTS[@]}"
             do
-                for r in "${REPETITIONS[@]}"
+                for a in "${ALPHA[@]}"
                 do
-                    echo "Solving with heuristic: $h, variant: $v, repetition: $r"
-                    time $BIN -s heur -f "$INPUT/$LINE" -o "$OUT/$h/v$v/r$r/" --heur-root 3 --heur-2step-variant $v --heur-root-iter $r --preproc-off
+                    echo "Solving with heuristic: $h, variant: $v, alpha: $a"
+                    time $BIN -s heur -f "$INPUT/$LINE" -o "$OUT/$h/v$v/a$a/" --heur-root 3 --heur-2step-variant $v --heur-semigreedy-alpha $a --heur-semigreedy-iter 100 --preproc-off
                 done
             done
         fi
