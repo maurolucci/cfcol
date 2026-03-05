@@ -55,7 +55,7 @@ do
                 for r in "${REPETITIONS[@]}"
                 do
                     echo "Solving with heuristic: $h, variant: $v, repetition: $r"
-                    time $BIN -s heur -f "$INPUT/$LINE" -o "$OUT/$h/v$v/r$r/" --heur-root 3 --heur-2step-variant $v --heur-root-iter $r --heur-semigreedy-alpha 0.2 --preproc-off
+                    time $BIN -s heur -f "$INPUT/$LINE" -o "$OUT/$h/v$v/r$r/" --heur-root 3 --heur-2step-variant $v --heur-semigreedy-iter $r --heur-semigreedy-alpha 0.2 --preproc-off
                 done
             done
         fi
