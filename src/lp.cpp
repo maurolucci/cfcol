@@ -468,7 +468,7 @@ int LP::pricing_P_Q_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
 int LP::pricing_P_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
                        IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot) {
   if (!params.pricingHeur3)
-    return 0;
+    return -1;
   int ret;
   auto startTime = std::chrono::high_resolution_clock::now();
   auto res = penv.mwis_P_solve(dualsA, dualsB);
