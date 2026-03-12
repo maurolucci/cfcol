@@ -111,8 +111,14 @@ size_t evaluate_vertex(const GraphEnv &genv,
     return get_Q_degree(genv, removed, selected, adj, v);
   else if (variant == 2)
     return get_collapsed_degree(genv, removed, selected, adj, v);
-  else
+  else if (variant == 3)
     return get_n_new_edge(genv, removed, selected, adj, v);
+  else {
+    if (genv.density <= 0.6)
+      return get_n_new_edge(genv, removed, selected, adj, v);
+    else
+      return get_collapsed_degree(genv, removed, selected, adj, v);
+  }
 }
 
 // Function to select the next vertex v following a greedy strategy
@@ -535,11 +541,11 @@ Vertex greedy_vertex_selector_1S(const GraphEnv &genv, Col &col,
 }
 
 // Select the color for vertex v
-// When the color of v is not forced, the color is selected based on the minimum
-// number of invalidated vertices. Colors that invalidate all remaining vertices
-// in some P_i' are ignored.
-// A new color is introduced only when mandatory (i.e. when the neighbors of v
-// already use all available colors or the available colors force a failure)
+// When the color of v is not forced, the color is selected based on the
+// minimum number of invalidated vertices. Colors that invalidate all
+// remaining vertices in some P_i' are ignored. A new color is introduced only
+// when mandatory (i.e. when the neighbors of v already use all available
+// colors or the available colors force a failure)
 std::pair<Color, VertexSet>
 greedy_color_selector_1S(const GraphEnv &genv, Col &col, const InfoMap &info,
                          VaSizeMap &nPi, const Vertex v) {

@@ -68,9 +68,9 @@ int main(int argc, const char **argv) {
   desc.add_options()("heur-nodes", po::value<int>()->default_value(2),
                      "type of heuristic for other nodes (0: no heuristic, 1: "
                      "greedy 1-step, 2: greedy 2-step, 3: semi-greedy 2-step)");
-  desc.add_options()("heur-2step-variant",
-                     po::value<size_t>()->default_value(3),
-                     "variant of the 2-step heuristic (2: DEG, 3: EDG");
+  desc.add_options()(
+      "heur-2step-variant", po::value<size_t>()->default_value(3),
+      "variant of the 2-step heuristic (2: DEG, 3: EDG, 4: AUTO)");
   desc.add_options()("heur-semigreedy-alpha",
                      po::value<double>()->default_value(0.2),
                      "alpha parameter for the semi-greedy heuristic");

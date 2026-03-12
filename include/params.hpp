@@ -172,19 +172,21 @@ struct Params {
         << std::endl;
     out << "Heuristic root node: " << heuristicRootNode
         << get_heur_name(heuristicRootNode);
-    if (heuristicRootNode == 2 || heuristicRootNode == 3)
+    if (heuristicRootNode == 2 || heuristicRootNode == 3 ||
+        heuristicRootNode == 4)
       out << ", variant: " << heuristic2stepVariant
           << get_heur_variant(heuristic2stepVariant);
-    if (heuristicRootNode == 3)
+    if (heuristicRootNode == 3 || heuristicRootNode == 4)
       out << ", alpha: " << heuristicSemigreedyAlpha
           << ", iterations: " << heuristicSemigreedyIter;
     out << std::endl;
     out << "Heuristic other nodes: " << heuristicOtherNodes
         << get_heur_name(heuristicOtherNodes);
-    if (heuristicRootNode == 2 || heuristicRootNode == 3)
+    if (heuristicRootNode == 2 || heuristicRootNode == 3 ||
+        heuristicRootNode == 4)
       out << ", variant: " << heuristic2stepVariant
           << get_heur_variant(heuristic2stepVariant);
-    if (heuristicOtherNodes == 3)
+    if (heuristicOtherNodes == 3 || heuristicRootNode == 4)
       out << ", alpha: " << heuristicSemigreedyAlpha
           << ", iterations: " << heuristicSemigreedyIter;
     out << std::endl;

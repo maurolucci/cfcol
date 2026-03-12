@@ -62,6 +62,7 @@ public:
   bool isInfeasible;              // Is the instance infeasible?
   bool hasTrivialSolution;        // Does the instance have a trivial solution?
   std::list<VertexInfo> isolated; // List of isolated vertices
+  double density;                 // Density of the graph (before preprocessing)
 
   GraphEnv(Graph *graph, bool preprocess1 = true, bool preprocess2 = true,
            bool preprocess3 = true, bool preprocess4 = true,
