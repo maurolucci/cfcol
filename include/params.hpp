@@ -133,6 +133,8 @@ struct Params {
       return " (deg-collapsed)";
     case 3:
       return " (edge)";
+    case 4:
+      return " (auto)";
     default:
       return " (unknown)";
     }

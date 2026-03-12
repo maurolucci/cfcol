@@ -108,7 +108,7 @@ GraphEnv::GraphEnv(Graph *graph, bool preprocess1, bool preprocess2,
       tyB2idB(), idA2TyA(), idB2TyB(), snd(), fst(), isRoot(isRoot),
       isGCP(true), isInfeasible(false), hasTrivialSolution(false), isolated() {
   // Density
-  density = static_cast<double>(num_edges(*graph)) /
+  density = static_cast<double>((num_edges(*graph)) * 2) /
             (num_vertices(*graph) * (num_vertices(*graph) - 1));
   // First, apply preprocessing
   preprocess(preprocess1, preprocess2, preprocess3, preprocess4);

@@ -310,6 +310,7 @@ int main(int argc, const char **argv) {
           heurStats = dpcp_2_step_greedy_heur(genv, col, params);
           break;
         case 3:
+        case 4:
           heurStats = dpcp_2_step_semigreedy_heur(genv, col, params);
           break;
         default:
