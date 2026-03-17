@@ -264,6 +264,7 @@ LP_STATE LP::optimize(double timelimit, double ub, Stats &stats) {
     // Compute dual value array
     cplex.getDuals(dualsA, cenv.XrestrA);
     cplex.getDuals(dualsB, cenv.XrestrB);
+    objVal = cplex.getObjValue();
 
     // Complete the dual values for redundant constraints
     for (size_t i = cenv.XrestrB.getSize(); i < in.nB; ++i)
@@ -297,7 +298,6 @@ LP_STATE LP::optimize(double timelimit, double ub, Stats &stats) {
     }
   }
 
-  objVal = cplex.getObjValue();
   // Save root lower bound
   if (in.isRoot) {
     stats.rootlb = objVal;
