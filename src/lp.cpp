@@ -297,6 +297,7 @@ LP_STATE LP::optimize(double timelimit, double ub, Stats &stats) {
     }
   }
 
+  objVal = cplex.getObjValue();
   // Save root lower bound
   if (in.isRoot) {
     stats.rootlb = objVal;
@@ -307,7 +308,6 @@ LP_STATE LP::optimize(double timelimit, double ub, Stats &stats) {
     // Recover primal values and objective value
     IloNumArray values = IloNumArray(cenv.Xenv, cenv.Xvars.getSize());
     cplex.getValues(values, cenv.Xvars);
-    objVal = cplex.getObjValue();
 
     // *******************************************************************
     // // Print some statics
