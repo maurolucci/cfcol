@@ -1,17 +1,17 @@
 #include "compact_ilp.hpp"
-#include "heur.hpp"
+
+#include <ilcplex/cplex.h>
+#include <ilcplex/ilocplex.h>
 
 #include <cfloat>
 #include <iostream>
 #include <map>
 #include <string>
 
-#include <ilcplex/cplex.h>
-#include <ilcplex/ilocplex.h>
+#include "heur.hpp"
 
-Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
-                Col &col) {
-
+Stats solve_ilp(DPCPInst& dpcp, const Params& params, std::ostream& log,
+                Col& col) {
   Stats stats;
 
   // Try to find an initial coloring with the heuristic
@@ -64,15 +64,14 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
 
   // Define objective
   IloExpr fobj(cxenv, 0);
-  for (size_t k = 0; k < ncolors; ++k)
-    fobj += w[k];
+  for (size_t k = 0; k < ncolors; ++k) fobj += w[k];
   cxmodel.add(IloMinimize(cxenv, fobj));
 
   // Constraints
 
   // \sum_{(a,b) \in V} \sum_{k \in C} x_(a,b)_k \geq 1, forall a \in A
   for (size_t pi = 0; pi < dpcp.get_nP(); ++pi) {
-    auto &vec = dpcp.get_P_parts()[pi];
+    auto& vec = dpcp.get_P_part()[pi];
     IloExpr restr(cxenv);
     for (Vertex v : vec)
       for (size_t k = 0; k < ncolors; ++k)
@@ -90,12 +89,10 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
       size_t pi2 = dpcp.get_P_part(v2);
       size_t qj2 = dpcp.get_Q_part(v2);
       size_t id2 = dpcp.get_current_id(v2);
-      if ((qj1 != qj2) || (pi1 == pi2))
-        continue;
+      if ((qj1 != qj2) || (pi1 == pi2)) continue;
       for (size_t k1 = 0; k1 < ncolors; ++k1)
         for (size_t k2 = 0; k2 < ncolors; ++k2) {
-          if (k1 == k2)
-            continue;
+          if (k1 == k2) continue;
           IloExpr restr(cxenv);
           restr += x[id1][k1] + x[id2][k2];
           cxcons.add(restr <= 1);
@@ -109,7 +106,8 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
     auto v = target(e, dpcp.get_graph());
     for (size_t k = 0; k < ncolors; ++k) {
       IloExpr restr(cxenv);
-      restr += x[dpcp.get_current_id(u)][k] + x[dpcp.get_current_id(v)][k] - w[k];
+      restr +=
+          x[dpcp.get_current_id(u)][k] + x[dpcp.get_current_id(v)][k] - w[k];
       cxcons.add(restr <= 0);
     }
   }
@@ -125,11 +123,11 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
     ColorClass classes = initialCol.get_color_classes();
     IloNumVarArray startVar(cxenv);
     IloNumArray startVal(cxenv);
-    for (auto [v, k] : coloring) {
-      startVar.add(x[dpcp.get_current_id(v)][k]);
+    for (auto [idv, k] : coloring) {
+      startVar.add(x[idv][k]);
       startVal.add(1);
     }
-    for (auto &[k, s] : classes) {
+    for (auto& [k, s] : classes) {
       startVar.add(w[k]);
       startVal.add(1);
     }
@@ -142,8 +140,8 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
   cplex.setDefaults();
   cplex.setOut(log);
   cplex.setParam(IloCplex::Param::TimeLimit, params.timeLimit);
-  cplex.setParam(IloCplex::Param::Parallel, 1); // Deterministic mode
-  cplex.setParam(IloCplex::Param::Threads, 1);  // Single thread
+  cplex.setParam(IloCplex::Param::Parallel, 1);  // Deterministic mode
+  cplex.setParam(IloCplex::Param::Threads, 1);   // Single thread
   // cplex.setParam(IloCplex::Param::MIP::Strategy::HeuristicEffort, 0);
 
   // Solve
@@ -152,25 +150,25 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
   // Get final state
   STATE state;
   switch (cplex.getCplexStatus()) {
-  case IloCplex::CplexStatus::Optimal:
-    state = OPTIMAL;
-    break;
-  case IloCplex::CplexStatus::Infeasible:
-    state = INFEASIBLE;
-    break;
-  case IloCplex::CplexStatus::AbortTimeLim:
-    if (cplex.getSolnPoolNsolns())
-      state = FEASIBLE;
-    else
-      state = TIME_EXCEEDED;
-    break;
-  case IloCplex::CplexStatus::MemLimFeas:
-  case IloCplex::CplexStatus::MemLimInfeas:
-    state = MEM_EXCEEDED;
-    break;
-  default:
-    state = UNKNOWN;
-    break;
+    case IloCplex::CplexStatus::Optimal:
+      state = OPTIMAL;
+      break;
+    case IloCplex::CplexStatus::Infeasible:
+      state = INFEASIBLE;
+      break;
+    case IloCplex::CplexStatus::AbortTimeLim:
+      if (cplex.getSolnPoolNsolns())
+        state = FEASIBLE;
+      else
+        state = TIME_EXCEEDED;
+      break;
+    case IloCplex::CplexStatus::MemLimFeas:
+    case IloCplex::CplexStatus::MemLimInfeas:
+      state = MEM_EXCEEDED;
+      break;
+    default:
+      state = UNKNOWN;
+      break;
   }
 
   if (state == OPTIMAL || state == FEASIBLE) {
@@ -178,7 +176,7 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
     for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
       for (size_t k = 0; k < ncolors; ++k)
         if (cplex.getValue(x[dpcp.get_current_id(v)][k]) > 0.5)
-          col.set_color(dpcp, v, k);
+          col.set_color(dpcp, dpcp.get_current_id(v), k);
     assert(col.check_coloring(dpcp));
   }
 
@@ -198,8 +196,7 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
   // Free memory
   fobj.end();
   cxcons.end();
-  for (size_t v = 0; v < num_vertices(dpcp.get_graph()); ++v)
-    x[v].end();
+  for (size_t v = 0; v < num_vertices(dpcp.get_graph()); ++v) x[v].end();
   x.end();
   w.end();
   cplex.end();
@@ -208,4 +205,3 @@ Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
 
   return stats;
 }
-
