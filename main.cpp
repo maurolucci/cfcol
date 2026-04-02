@@ -89,20 +89,20 @@ int main(int argc, const char** argv) {
   desc.add_options()("heur-semigreedy-iter",
                      po::value<size_t>()->default_value(100),
                      "number of iterations for the semi-greedy heuristic");
-  desc.add_options()("feas-root", po::value<int>()->default_value(2),
+  desc.add_options()("feas-root", po::value<int>()->default_value(0),
                      "type of feasibility check for the root node (0: no "
                      "check, 1: enumerative, 2: ILP)");
   desc.add_options()(
       "feas-root-time", po::value<int>()->default_value(300),
       "time limit for feasibility check (in seconds). Only for ILP");
-  desc.add_options()("feas-nodes", po::value<int>()->default_value(2),
+  desc.add_options()("feas-nodes", po::value<int>()->default_value(0),
                      "type of feasibility check for other nodes (0: no "
                      "check, 1: enumerative, 2: ILP)");
   desc.add_options()(
       "feas-nodes-time", po::value<int>()->default_value(60),
       "time limit for feasibility check (in seconds). Only for ILP");
   desc.add_options()(
-      "inherit-cols", po::value<int>()->default_value(2),
+      "inherit-cols", po::value<int>()->default_value(1),
       "type of column inheritance from parent (0: no inheritance, 1: inherit "
       "all columns, 2: inherit only positive columns)");
   desc.add_options()("dummy-weight", po::value<double>()->default_value(1000.0),
@@ -114,10 +114,10 @@ int main(int argc, const char** argv) {
       "3: greedy + P-MWSSP + ILP, 4: greedy + P,Q-MWSSP + P-MWSSP + ILP, "
       "5: greedy + P-MWSSP + P,Q-MWSSP + ILP, 6: automatic by density)");
   desc.add_options()("pricing-greedy-max-cols",
-                     po::value<size_t>()->default_value(1),
+                     po::value<size_t>()->default_value(1000),
                      "maximum number of columns to add with greedy pricing");
   desc.add_options()("pricing-greedy-alpha",
-                     po::value<double>()->default_value(0.1),
+                     po::value<double>()->default_value(0.2),
                      "alpha parameter for the greedy pricing heuristic");
   desc.add_options()("pricing-exact-time",
                      po::value<size_t>()->default_value(300),
