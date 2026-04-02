@@ -24,18 +24,18 @@ using TimePoint = std::chrono::_V2::system_clock::time_point;
 
 // Criteria 0: DEG-REAL
 // Degree of v in G, ignoring neighbors in P_{i(v)} and Q_{j(v)}
-size_t get_real_degree(const GraphEnv &genv,
+size_t get_real_degree(const DPCPInst &dpcp,
                        const std::map<Vertex, bool> &removed,
                        const VertexVector &selected,
-                       const std::map<TypeB, std::set<TypeB>> &adj,
+                       const std::map<size_t, std::set<size_t>> &adj,
                        const Vertex &v) {
   size_t degree = 0;
   for (Vertex u :
-       boost::make_iterator_range(adjacent_vertices(v, genv.graph))) {
+       boost::make_iterator_range(adjacent_vertices(v, dpcp.get_graph()))) {
     if (removed.at(u))
       continue;
-    if (genv.graph[u].first != genv.graph[v].first &&
-        genv.graph[u].second != genv.graph[v].second)
+    if (dpcp.get_P_part(u) != dpcp.get_P_part(v) &&
+        dpcp.get_Q_part(u) != dpcp.get_Q_part(v))
       degree++;
   }
   return degree;
@@ -43,16 +43,16 @@ size_t get_real_degree(const GraphEnv &genv,
 
 // Criteria 1: DEG-Q (used for breaking ties)
 // Degree of v in G[Q_{j_v}]
-size_t get_Q_degree(const GraphEnv &genv, const std::map<Vertex, bool> &removed,
+size_t get_Q_degree(const DPCPInst &dpcp, const std::map<Vertex, bool> &removed,
                     const VertexVector &selected,
-                    const std::map<TypeB, std::set<TypeB>> &adj,
+                    const std::map<size_t, std::set<size_t>> &adj,
                     const Vertex &v) {
   size_t neighbors = 0;
   for (Vertex u :
-       boost::make_iterator_range(adjacent_vertices(v, genv.graph))) {
+       boost::make_iterator_range(adjacent_vertices(v, dpcp.get_graph()))) {
     if (removed.at(u))
       continue;
-    if (genv.graph[u].second == genv.graph[v].second)
+    if (dpcp.get_Q_part(u) == dpcp.get_Q_part(v))
       neighbors++;
   }
   return neighbors;
@@ -61,36 +61,36 @@ size_t get_Q_degree(const GraphEnv &genv, const std::map<Vertex, bool> &removed,
 // Criteria 2: DEG-COLLAPSED
 // Degree of v in the collapsed graph according to Q,
 // ignoring neighbors in P_{i(v)} and Q_{j(v)}
-size_t get_collapsed_degree(const GraphEnv &genv,
+size_t get_collapsed_degree(const DPCPInst &dpcp,
                             const std::map<Vertex, bool> &removed,
                             const VertexVector &selected,
-                            const std::map<TypeB, std::set<TypeB>> &adj,
+                            const std::map<size_t, std::set<size_t>> &adj,
                             const Vertex &v) {
-  std::set<TypeB> Qdegree;
+  std::set<size_t> Qdegree;
   for (Vertex u :
-       boost::make_iterator_range(adjacent_vertices(v, genv.graph))) {
+       boost::make_iterator_range(adjacent_vertices(v, dpcp.get_graph()))) {
     if (removed.at(u))
       continue;
-    if (genv.graph[u].first != genv.graph[v].first &&
-        genv.graph[u].second != genv.graph[v].second)
-      Qdegree.insert(genv.graph[u].second);
+    if (dpcp.get_P_part(u) != dpcp.get_P_part(v) &&
+        dpcp.get_Q_part(u) != dpcp.get_Q_part(v))
+      Qdegree.insert(dpcp.get_Q_part(u));
   }
   return Qdegree.size();
 }
 
 // Criteria 3: EDG
 // No. of edges added to \tilde{G}[W]
-size_t get_n_new_edge(const GraphEnv &genv,
+size_t get_n_new_edge(const DPCPInst &dpcp,
                       const std::map<Vertex, bool> &removed,
                       const VertexVector &selected,
-                      const std::map<TypeB, std::set<TypeB>> &adj,
+                      const std::map<size_t, std::set<size_t>> &adj,
                       const Vertex &v) {
-  std::set<TypeB> adjBs;
-  TypeB bv = genv.graph[v].second;
+  std::set<size_t> adjBs;
+  size_t bv = dpcp.get_Q_part(v);
   for (Vertex u : selected) {
-    if (!edge(v, u, genv.graph).second)
+    if (!edge(v, u, dpcp.get_graph()).second)
       continue;
-    TypeB bu = genv.graph[u].second;
+    size_t bu = dpcp.get_Q_part(u);
     if (bv == bu)
       continue;
     if (bv < bu && (!adj.contains(bv) || !adj.at(bv).contains(bu)))
@@ -101,33 +101,33 @@ size_t get_n_new_edge(const GraphEnv &genv,
   return adjBs.size();
 }
 
-size_t evaluate_vertex(const GraphEnv &genv,
+size_t evaluate_vertex(const DPCPInst &dpcp,
                        const std::map<Vertex, bool> &removed,
                        const VertexVector &selected,
-                       const std::map<TypeB, std::set<TypeB>> &adj,
+                       const std::map<size_t, std::set<size_t>> &adj,
                        size_t variant, const Vertex &v) {
   if (variant == 0)
-    return get_real_degree(genv, removed, selected, adj, v);
+    return get_real_degree(dpcp, removed, selected, adj, v);
   else if (variant == 1)
-    return get_Q_degree(genv, removed, selected, adj, v);
+    return get_Q_degree(dpcp, removed, selected, adj, v);
   else if (variant == 2)
-    return get_collapsed_degree(genv, removed, selected, adj, v);
+    return get_collapsed_degree(dpcp, removed, selected, adj, v);
   else if (variant == 3)
-    return get_n_new_edge(genv, removed, selected, adj, v);
+    return get_n_new_edge(dpcp, removed, selected, adj, v);
   else {
-    if (genv.density <= 0.6)
-      return get_n_new_edge(genv, removed, selected, adj, v);
+    if (dpcp.get_density() <= 0.6)
+      return get_n_new_edge(dpcp, removed, selected, adj, v);
     else
-      return get_collapsed_degree(genv, removed, selected, adj, v);
+      return get_collapsed_degree(dpcp, removed, selected, adj, v);
   }
 }
 
 // Function to select the next vertex v following a greedy strategy
-Vertex greedy_vertex_selector(const GraphEnv &genv,
+Vertex greedy_vertex_selector(const DPCPInst &dpcp,
                               const VertexVector &candidates,
                               const std::map<Vertex, bool> &removed,
                               const VertexVector &selected,
-                              std::map<TypeB, std::set<TypeB>> &adj,
+                              std::map<size_t, std::set<size_t>> &adj,
                               const Params &params) {
   Vertex minVertex = NULL;
   size_t minVal = std::numeric_limits<size_t>::max();
@@ -135,14 +135,14 @@ Vertex greedy_vertex_selector(const GraphEnv &genv,
   for (Vertex v : candidates) {
     if (removed.at(v))
       continue;
-    size_t val = evaluate_vertex(genv, removed, selected, adj,
+    size_t val = evaluate_vertex(dpcp, removed, selected, adj,
                                  params.heuristic2stepVariant, v);
     if (val < minVal) {
       minVal = val;
-      minTie = evaluate_vertex(genv, removed, selected, adj, 1, v);
+      minTie = evaluate_vertex(dpcp, removed, selected, adj, 1, v);
       minVertex = v;
     } else if (val == minVal) {
-      size_t tie = evaluate_vertex(genv, removed, selected, adj, 1, v);
+      size_t tie = evaluate_vertex(dpcp, removed, selected, adj, 1, v);
       if (tie < minTie) {
         minTie = tie;
         minVertex = v;
@@ -156,11 +156,11 @@ Vertex greedy_vertex_selector(const GraphEnv &genv,
 // We use a restricted candidate list (RCL) of size |RCL| = max(1, alpha*|C|)
 // where C is the set of candidates and alpha in [0,1] is a parameter
 // We store in the RCL the best candidates and we select randomly one of them
-Vertex semigreedy_vertex_selector(const GraphEnv &genv,
+Vertex semigreedy_vertex_selector(const DPCPInst &dpcp,
                                   const VertexVector &candidates,
                                   const std::map<Vertex, bool> &removed,
                                   const VertexVector &selected,
-                                  std::map<TypeB, std::set<TypeB>> &adj,
+                                  std::map<size_t, std::set<size_t>> &adj,
                                   const Params &params) {
 
   // First, find the lowest and highest degree among the candidates
@@ -170,7 +170,7 @@ Vertex semigreedy_vertex_selector(const GraphEnv &genv,
   for (Vertex v : candidates) {
     if (removed.at(v))
       continue;
-    size_t val = evaluate_vertex(genv, removed, selected, adj,
+    size_t val = evaluate_vertex(dpcp, removed, selected, adj,
                                  params.heuristic2stepVariant, v);
     valMap[v] = val;
     if (val < minVal)
@@ -195,79 +195,81 @@ Vertex semigreedy_vertex_selector(const GraphEnv &genv,
   return rcl[r];
 }
 
-using Heur2SVertexSelector = Vertex (*)(const GraphEnv &, const VertexVector &,
+using Heur2SVertexSelector = Vertex (*)(const DPCPInst &, const VertexVector &,
                                         const std::map<Vertex, bool> &,
                                         const VertexVector &,
-                                        std::map<TypeB, std::set<TypeB>> &,
+                                        std::map<size_t, std::set<size_t>> &,
                                         const Params &params);
 
 // Update the information after removing a vertex v
-void update_info(const Graph &graph, std::map<Vertex, bool> &removed, Vertex v,
-                 std::map<TypeA, size_t> &nVa) {
+void update_info(const DPCPInst &dpcp, std::map<Vertex, bool> &removed, Vertex v,
+                 std::map<size_t, size_t> &nVa) {
   removed.at(v) = true;
-  TypeA av = graph[v].first;
+  size_t av = dpcp.get_P_part(v);
   nVa.at(av)--;
 }
 
 // First step of the 2-step heuristic for DPCP
 // Select a set of vertices of size |A|, one from each Va, such that the
 // selected vertices of each Vb are a stable set
-bool first_step(const GraphEnv &genv, VertexVector &selected,
-                std::map<TypeB, std::set<TypeB>> &adj, const Params &params,
+bool first_step(const DPCPInst &dpcp, VertexVector &selected,
+                std::map<size_t, std::set<size_t>> &adj, const Params &params,
                 Heur2SVertexSelector vertexSelector) {
 
   // Map with the removed vertices
   std::map<Vertex, bool> removed;
-  for (Vertex u : boost::make_iterator_range(vertices(genv.graph)))
+  for (Vertex u : boost::make_iterator_range(vertices(dpcp.get_graph())))
     removed.emplace(u, false);
 
-  // Fill the map with the size of each Va
-  std::map<TypeA, size_t> nVa;
-  for (auto &[a, Va] : genv.Va)
-    nVa.emplace(a, Va.size());
+  // Fill the map with the size of each P[pi]
+  std::map<size_t, size_t> nVa;
+  for (size_t pi = 0; pi < dpcp.get_nP(); ++pi)
+    nVa.emplace(pi, dpcp.get_P_parts()[pi].size());
 
   // Subset of A that has not been processed yet
-  std::set<TypeA> unprocessedA(genv.idA2TyA.begin(), genv.idA2TyA.end());
+  std::set<size_t> unprocessedA;
+  for (size_t pi = 0; pi < dpcp.get_nP(); ++pi)
+    unprocessedA.insert(pi);
 
   // Comparison function for selecting the next a to process
-  std::function<bool(const TypeA, const TypeA)> compareFunc;
+  std::function<bool(const size_t, const size_t)> compareFunc;
   if (vertexSelector == greedy_vertex_selector) {
     // For greedy strategy, choose a such that Va has currently the minimum
     // size, break ties by the index of a
-    compareFunc = [&nVa](const TypeA a1, const TypeA a2) {
+    compareFunc = [&nVa](const size_t a1, const size_t a2) {
       return (nVa.at(a1) < nVa.at(a2) || (nVa.at(a1) == nVa.at(a2) && a1 < a2));
     };
   } else {
     // Otherwise, choose a such that Va has currently the minimum size,
     // but break ties randomly
-    compareFunc = [&nVa](const TypeA a1, const TypeA a2) {
+    compareFunc = [&nVa](const size_t a1, const size_t a2) {
       return (nVa.at(a1) < nVa.at(a2) ||
               (nVa.at(a1) == nVa.at(a2) && (rand_int(rng) % 2) == 0));
     };
   }
 
-  while (selected.size() < genv.nA) {
+  while (selected.size() < dpcp.get_nP()) {
 
     // Choose an unprocessed a
-    TypeA a = *std::min_element(unprocessedA.begin(), unprocessedA.end(),
+    size_t a = *std::min_element(unprocessedA.begin(), unprocessedA.end(),
                                 compareFunc);
     unprocessedA.erase(a);
 
     // Choose a vertex, with some criterion
     Vertex v =
-        vertexSelector(genv, genv.Va.at(a), removed, selected, adj, params);
+      vertexSelector(dpcp, dpcp.get_P_parts()[a], removed, selected, adj, params);
     // info.at(v).print_info();
     if (v == NULL)
       return false; // No vertex can be selected from Va
 
     // Get label b of v
-    TypeB b = genv.graph[v].second;
+    size_t b = dpcp.get_Q_part(v);
 
     // Update adjacent list and selected
     for (Vertex u : selected) {
-      if (!edge(u, v, genv.graph).second)
+      if (!edge(u, v, dpcp.get_graph()).second)
         continue;
-      TypeB b2 = genv.graph[u].second;
+      size_t b2 = dpcp.get_Q_part(u);
       if (b < b2)
         adj[b].insert(b2);
       else if (b > b2)
@@ -276,35 +278,35 @@ bool first_step(const GraphEnv &genv, VertexVector &selected,
     selected.push_back(v);
 
     // Remove the vertices invalidated by choosing v, i.e.
-    // vertices of Va \ v and neighbors of v that also belong to Vb
-    for (Vertex u : genv.Va.at(a))
+    // vertices of P[a] \ v and neighbors of v that also belong to Q[b]
+    for (Vertex u : dpcp.get_P_parts()[a])
       if (!removed.at(u) && u != v)
-        update_info(genv.graph, removed, u, nVa);
+        update_info(dpcp, removed, u, nVa);
     for (Vertex u :
-         boost::make_iterator_range(adjacent_vertices(v, genv.graph)))
-      if (!removed.at(u) && genv.graph[u].second == b)
-        update_info(genv.graph, removed, u, nVa);
+         boost::make_iterator_range(adjacent_vertices(v, dpcp.get_graph())))
+      if (!removed.at(u) && dpcp.get_Q_part(u) == b)
+        update_info(dpcp, removed, u, nVa);
   }
 
-  return selected.size() == genv.nA;
+  return selected.size() == dpcp.get_nP();
 }
 
 // Second step of the 2-step heuristic for DPCP
 // Color the selected vertices using DSATUR on the graph induced by them,
-// collapsing vertices of each Vb
-void dpcp_dsatur_heur(const GraphEnv &genv, VertexVector &selected,
-                      std::map<TypeB, std::set<TypeB>> &adj, Col &col) {
-  std::map<TypeB, size_t> bs; // Map from b to its new index (in the subgraph)
-  std::vector<TypeB> invbs;   // Map from new index (in the subgraph) to b
-  std::map<TypeB, VertexVector>
+// collapsing vertices of each Q[qj]
+void dpcp_dsatur_heur(const DPCPInst &dpcp, VertexVector &selected,
+                      std::map<size_t, std::set<size_t>> &adj, Col &col) {
+  std::map<size_t, size_t> bs; // Map from b to its new index (in the subgraph)
+  std::vector<size_t> invbs;   // Map from new index (in the subgraph) to b
+  std::map<size_t, VertexVector>
       repr;       // Map from b to the vector of vertices that b represents
   int ecount = 0; // Number of edges in the subgraph
-  int elist[2 * num_edges(genv.graph)]; // Edgle list of the subgraph
+  int elist[2 * num_edges(dpcp.get_graph())]; // Edgle list of the subgraph
 
   // First, initialize the bs, invbs and repr structures
   // This will be used for building the vertex set of the subgraph to color
   for (Vertex v : selected) {
-    TypeB b1 = genv.graph[v].second;
+    size_t b1 = dpcp.get_Q_part(v);
     if (!bs.contains(b1)) {
       bs[b1] = bs.size();
       invbs.push_back(b1);
@@ -315,7 +317,7 @@ void dpcp_dsatur_heur(const GraphEnv &genv, VertexVector &selected,
 
   // Seconds, build the edge list of the subgraph to color
   for (auto &[b1, adjB] : adj)
-    for (TypeB b2 : adjB) {
+    for (size_t b2 : adjB) {
       elist[2 * ecount] = bs[b1];
       elist[2 * ecount + 1] = bs[b2];
       ecount++;
@@ -330,14 +332,14 @@ void dpcp_dsatur_heur(const GraphEnv &genv, VertexVector &selected,
   col.reset_coloring();
   for (int k = 0; k < ncolors; ++k)
     for (int j = 0; j < colorclasses[k].count; ++j) {
-      TypeB b = invbs[colorclasses[k].members[j]];
+      size_t b = invbs[colorclasses[k].members[j]];
       for (Vertex v : repr[b])
-        col.set_color(genv.graph, v, k);
+        col.set_color(dpcp, v, k);
     }
 }
 
 // General two-step greedy heuristic for DPCP
-HeurStats dpcp_2_step_greedy_heur(const GraphEnv &genv, Col &col,
+HeurStats dpcp_2_step_greedy_heur(const DPCPInst &dpcp, Col &col,
                                   const Params &params) {
 
   TimePoint start = ClockType::now();
@@ -345,16 +347,16 @@ HeurStats dpcp_2_step_greedy_heur(const GraphEnv &genv, Col &col,
 
   // First step
   VertexVector selected;                // Vector of selected vertices
-  std::map<TypeB, std::set<TypeB>> adj; // Adjacent list of the subgraph
+  std::map<size_t, std::set<size_t>> adj; // Adjacent list of the subgraph
                                         // induced by the selected vertices
   bool success =
-      first_step(genv, selected, adj, params, greedy_vertex_selector);
+      first_step(dpcp, selected, adj, params, greedy_vertex_selector);
   if (!success) {
     stats.state = UNKNOWN;
   } else {
     // Second step
-    dpcp_dsatur_heur(genv, selected, adj, col);
-    assert(col.check_coloring(genv.graph));
+    dpcp_dsatur_heur(dpcp, selected, adj, col);
+    assert(col.check_coloring(dpcp));
     stats.state = FEASIBLE;
     stats.value = static_cast<double>(col.get_n_colors());
     stats.bestTime =
@@ -370,22 +372,22 @@ HeurStats dpcp_2_step_greedy_heur(const GraphEnv &genv, Col &col,
 }
 
 // General two-step semigreedy heuristic for DPCP
-HeurStats dpcp_2_step_semigreedy_heur(const GraphEnv &genv, Col &col,
+HeurStats dpcp_2_step_semigreedy_heur(const DPCPInst &dpcp, Col &col,
                                       const Params &params,
-                                      std::ofstream &iterFile) {
+                                      std::ostream &iterFile) {
 
   TimePoint start = ClockType::now();
   HeurStats stats;
-  stats.totalIters = params.heuristicSemigreedyIter * num_vertices(genv.graph);
+  stats.totalIters = params.heuristicSemigreedyIter * num_vertices(dpcp.get_graph());
 
   for (size_t i = 0; i < stats.totalIters; ++i) {
 
     // First step
     VertexVector selected;                // Vector of selected vertices
-    std::map<TypeB, std::set<TypeB>> adj; // Adjacent list of the subgraph
+    std::map<size_t, std::set<size_t>> adj; // Adjacent list of the subgraph
                                           // induced by the selected vertices
     bool success =
-        first_step(genv, selected, adj, params, semigreedy_vertex_selector);
+        first_step(dpcp, selected, adj, params, semigreedy_vertex_selector);
     if (!success) {
       iterFile << ","
                << (col.get_n_colors() == 0
@@ -395,7 +397,7 @@ HeurStats dpcp_2_step_semigreedy_heur(const GraphEnv &genv, Col &col,
     } else {
       // Second step
       Col newCol;
-      dpcp_dsatur_heur(genv, selected, adj, newCol);
+      dpcp_dsatur_heur(dpcp, selected, adj, newCol);
       if (col.get_n_colors() == 0 ||
           newCol.get_n_colors() < col.get_n_colors()) {
         col = newCol;
@@ -410,7 +412,7 @@ HeurStats dpcp_2_step_semigreedy_heur(const GraphEnv &genv, Col &col,
   if (col.get_n_colors() == 0) {
     stats.state = UNKNOWN;
   } else {
-    assert(col.check_coloring(genv.graph));
+    assert(col.check_coloring(dpcp));
     stats.state = FEASIBLE;
     stats.value = static_cast<double>(col.get_n_colors());
   }
@@ -432,19 +434,20 @@ struct Heur1SVertexInfo {
   Color color;               // color of the vertex (-1: uncolored)
   std::set<Color> adjColors; // set of adjacent colors
   std::set<Vertex>
-      uncolNeighbors; // set of uncolored neighbors (outside of Va U Vb)
-  std::map<TypeB, size_t> degree; // Q-degree
-  TypeA a;
-  TypeB b;
+      uncolNeighbors; // set of uncolored neighbors (outside of P[pi] U Q[qj])
+  std::map<size_t, size_t> degree; // Q-degree
+  size_t a;
+  size_t b;
 
   // Constructor
-  Heur1SVertexInfo(const Graph &graph, const Vertex &u)
+  Heur1SVertexInfo(const DPCPInst &dpcp, const Vertex &u)
       : removed(false), color(-1), adjColors(), uncolNeighbors(),
-        a(graph[u].first), b(graph[u].second) {
-    for (Vertex v : boost::make_iterator_range(adjacent_vertices(u, graph))) {
+        a(dpcp.get_P_part(u)), b(dpcp.get_Q_part(u)) {
+    for (Vertex v :
+         boost::make_iterator_range(adjacent_vertices(u, dpcp.get_graph()))) {
       // Get components (a,b) of v
-      TypeA av = graph[v].first;
-      TypeB bv = graph[v].second;
+      size_t av = dpcp.get_P_part(v);
+      size_t bv = dpcp.get_Q_part(v);
       if (a != av && b != bv) {
         uncolNeighbors.insert(v);
         degree[bv]++;
@@ -463,32 +466,32 @@ struct Heur1SVertexInfo {
 };
 
 using InfoMap = std::map<Vertex, Heur1SVertexInfo>;
-using VaSizeMap = std::map<TypeA, size_t>;
+using VaSizeMap = std::map<size_t, size_t>;
 
 // Get the set of vertices that are invalidated when vertex v = (a,b) is
 // colored with i, i.e. the returned set contains:
-// (i) neighbors of v in V^b
-// (ii) vertices of V^b that has i as an adjacent color
+// (i) neighbors of v in Q[b]
+// (ii) vertices of Q[b] that have i as an adjacent color
 // (iii) neighbor (a',b') of v with a != a' and b != b' such
-//       that some vertex of Vb' has color i
-// Raise an exception if v invalidates all the remaining vertices of some V_a'
-VertexSet get_invalidated_vertices(const GraphEnv &genv, Col &col,
+//       that some vertex of Q[b'] has color i
+// Raise an exception if v invalidates all the remaining vertices of some P[a']
+VertexSet get_invalidated_vertices(const DPCPInst &dpcp, Col &col,
                                    const InfoMap &info, const VaSizeMap &nVa,
                                    Vertex v, Color i) {
   VertexSet inv;
-  std::map<TypeA, std::set<Vertex>> invMap;
-  for (Vertex u : genv.Vb.at(genv.graph[v].second))
+  std::map<size_t, std::set<Vertex>> invMap;
+  for (Vertex u : dpcp.get_Q_parts()[dpcp.get_Q_part(v)])
     if (!info.at(u).removed && info.at(u).color == -1 &&
-        ((!edge(u, v, genv.graph).second && info.at(u).adjColors.contains(i)) ||
-         edge(u, v, genv.graph).second)) {
+        ((!edge(u, v, dpcp.get_graph()).second && info.at(u).adjColors.contains(i)) ||
+         edge(u, v, dpcp.get_graph()).second)) {
       inv.insert(u);
-      invMap[genv.graph[u].first].insert(u);
+      invMap[dpcp.get_P_part(u)].insert(u);
     }
   for (Vertex u : info.at(v).uncolNeighbors)
-    if (col.is_colored_B(genv.graph[u].second) &&
-        col.get_color_B(genv.graph[u].second) == i) {
+    if (col.is_colored_Q(dpcp.get_Q_part(u)) &&
+        col.get_color_Q(dpcp.get_Q_part(u)) == i) {
       inv.insert(u);
-      invMap[genv.graph[u].first].insert(u);
+      invMap[dpcp.get_P_part(u)].insert(u);
     }
   for (auto &[a, vs] : invMap)
     if (vs.size() == nVa.at(a))
@@ -501,8 +504,8 @@ VertexSet get_invalidated_vertices(const GraphEnv &genv, Col &col,
 // saturation, where ties are broken by the minimum Q-degree.
 // Seconds, among those vertices, choose the one with the maximum degree of
 // saturation, where ties are broken by the minimum cardinality of P_i
-Vertex greedy_vertex_selector_1S(const GraphEnv &genv, Col &col,
-                                 const InfoMap &info, VaSizeMap &nPi, ASet &I) {
+Vertex greedy_vertex_selector_1S(const DPCPInst &dpcp, Col &col,
+                                 const InfoMap &info, VaSizeMap &nPi, std::set<size_t> &I) {
 
   // Choose a vertex with the maximum degree of saturation,
   // among the vertices with the minimum degree of saturation in each P_i
@@ -520,7 +523,7 @@ Vertex greedy_vertex_selector_1S(const GraphEnv &genv, Col &col,
     Vertex minv = NULL;
     size_t mindsat = std::numeric_limits<size_t>::max();
     size_t minQdeg = std::numeric_limits<size_t>::max();
-    for (Vertex v : genv.Va.at(i)) {
+    for (Vertex v : dpcp.get_P_parts()[i]) {
       if (info.at(v).removed)
         continue;
       size_t dsat = info.at(v).adjColors.size();
@@ -555,7 +558,7 @@ Vertex greedy_vertex_selector_1S(const GraphEnv &genv, Col &col,
 // when mandatory (i.e. when the neighbors of v already use all available
 // colors or the available colors force a failure)
 std::pair<Color, VertexSet>
-greedy_color_selector_1S(const GraphEnv &genv, Col &col, const InfoMap &info,
+greedy_color_selector_1S(const DPCPInst &dpcp, Col &col, const InfoMap &info,
                          VaSizeMap &nPi, const Vertex v) {
 
   Color bestc = -1;
@@ -563,10 +566,10 @@ greedy_color_selector_1S(const GraphEnv &genv, Col &col, const InfoMap &info,
 
   // Is the color of v forced? That is, when Q_{j_v} has already colored
   // vertices
-  if (col.is_colored_B(genv.graph[v].second)) {
-    bestc = col.get_color_B(genv.graph[v].second);
+  if (col.is_colored_Q(dpcp.get_Q_part(v))) {
+    bestc = col.get_color_Q(dpcp.get_Q_part(v));
     try {
-      bestinv = get_invalidated_vertices(genv, col, info, nPi, v, bestc);
+      bestinv = get_invalidated_vertices(dpcp, col, info, nPi, v, bestc);
     } catch (...) {
       throw std::exception();
     }
@@ -590,7 +593,7 @@ greedy_color_selector_1S(const GraphEnv &genv, Col &col, const InfoMap &info,
       continue; // No need to try a new color if some used color is candidate
     VertexSet inv;
     try {
-      inv = get_invalidated_vertices(genv, col, info, nPi, v, c);
+      inv = get_invalidated_vertices(dpcp, col, info, nPi, v, c);
     } catch (...) {
       continue;
     }
@@ -609,29 +612,31 @@ greedy_color_selector_1S(const GraphEnv &genv, Col &col, const InfoMap &info,
 // Single-step greedy heuristic for DPCP
 // In each iteration, a vertex is selected and colored, with some criterion.
 // Before proceeding to the next iteration, invalidated vertices are removed
-bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
+bool single_step(const DPCPInst &dpcp, Col &col, bool greedy) {
 
   // Map with the necessary information of each vertex
   std::map<Vertex, Heur1SVertexInfo> info;
 
-  // Map with the size of each Va
-  std::map<TypeA, size_t> nVa;
-  for (auto &[a, Va] : genv.Va)
-    nVa.emplace(a, Va.size());
+  // Map with the size of each P[pi]
+  std::map<size_t, size_t> nVa;
+  for (size_t pi = 0; pi < dpcp.get_nP(); ++pi)
+    nVa.emplace(pi, dpcp.get_P_parts()[pi].size());
 
   // Fill the information of the vertices and add them to the candidate list
-  for (Vertex u : boost::make_iterator_range(vertices(genv.graph)))
-    info.emplace(u, Heur1SVertexInfo(genv.graph, u));
+  for (Vertex u : boost::make_iterator_range(vertices(dpcp.get_graph())))
+    info.emplace(u, Heur1SVertexInfo(dpcp, u));
 
   // Subset of A that has not been processed yet
-  ASet A(genv.idA2TyA.begin(), genv.idA2TyA.end());
+  std::set<size_t> A;
+  for (size_t pi = 0; pi < dpcp.get_nP(); ++pi)
+    A.insert(pi);
 
   while (!A.empty()) {
 
-    Vertex u = greedy_vertex_selector_1S(genv, col, info, nVa, A);
+    Vertex u = greedy_vertex_selector_1S(dpcp, col, info, nVa, A);
     std::pair<Color, VertexSet> tuple;
     try {
-      tuple = greedy_color_selector_1S(genv, col, info, nVa, u);
+      tuple = greedy_color_selector_1S(dpcp, col, info, nVa, u);
     } catch (...) {
       return false;
     }
@@ -642,11 +647,11 @@ bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
 
     // Color u with i
     info.at(u).color = i;
-    col.set_color(genv.graph, u, i);
+    col.set_color(dpcp, u, i);
     // info.at(u).print_info();
 
     // Invalidate the remaining vertices of Va
-    for (Vertex v : genv.Va.at(genv.graph[u].first))
+    for (Vertex v : dpcp.get_P_parts()[dpcp.get_P_part(u)])
       if (v != u && !info.at(v).removed)
         inv.insert(v);
 
@@ -660,7 +665,7 @@ bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
       nVa.at(info.at(v).a)--;
       for (Vertex w : info.at(v).uncolNeighbors) {
         info.at(w).uncolNeighbors.erase(v);
-        TypeB jv = info.at(v).b;
+        size_t jv = info.at(v).b;
         info.at(w).degree[jv]--;
         if (info.at(w).degree[jv] == 0)
           info.at(w).degree.erase(jv);
@@ -670,12 +675,22 @@ bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
   return true;
 }
 
+// 3-arg overload: discards iterFile output
+HeurStats dpcp_2_step_semigreedy_heur(const DPCPInst &dpcp, Col &col,
+                                      const Params &params) {
+  struct NullBuffer : std::streambuf {
+    int overflow(int c) { return c; }
+  } nullBuffer;
+  std::ostream nullstream(&nullBuffer);
+  return dpcp_2_step_semigreedy_heur(dpcp, col, params, nullstream);
+}
+
 // One-step heuristic for DPCP
-HeurStats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
+HeurStats dpcp_1_step_greedy_heur(const DPCPInst &dpcp, Col &col) {
   TimePoint start = ClockType::now();
   HeurStats stats;
 
-  bool success = single_step(genv, col, true);
+  bool success = single_step(dpcp, col, true);
 
   if (!success) {
     TimePoint end = ClockType::now();
@@ -685,7 +700,7 @@ HeurStats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
     return stats;
   }
 
-  assert(col.check_coloring(genv.graph));
+  assert(col.check_coloring(dpcp));
 
   TimePoint end = ClockType::now();
   stats.state = FEASIBLE;
@@ -697,3 +712,4 @@ HeurStats dpcp_1_step_greedy_heur(const GraphEnv &genv, Col &col) {
 
   return stats;
 }
+

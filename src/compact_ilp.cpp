@@ -9,20 +9,19 @@
 #include <ilcplex/cplex.h>
 #include <ilcplex/ilocplex.h>
 
-Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
+Stats solve_ilp(DPCPInst &dpcp, const Params &params, std::ostream &log,
                 Col &col) {
 
   Stats stats;
 
   // Try to find an initial coloring with the heuristic
   Col initialCol;
-  GraphEnv genv(&graph, false, false, false, true);
   if (params.heuristicRootNode == 1)
-    stats = dpcp_1_step_greedy_heur(genv, initialCol);
+    stats = dpcp_1_step_greedy_heur(dpcp, initialCol);
   else if (params.heuristicRootNode == 2)
-    stats = dpcp_2_step_greedy_heur(genv, initialCol, params);
+    stats = dpcp_2_step_greedy_heur(dpcp, initialCol, params);
   else if (params.heuristicRootNode == 3)
-    stats = dpcp_2_step_semigreedy_heur(genv, initialCol, params);
+    stats = dpcp_2_step_semigreedy_heur(dpcp, initialCol, params);
 
   // Save initial solution stats
   if (params.heuristicRootNode >= 1 && params.heuristicRootNode <= 4) {
@@ -37,19 +36,19 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
     log << "Initial coloring with " << initialCol.get_n_colors()
         << " colors found by heuristic." << std::endl;
   } else {
-    ncolors = std::min(genv.nA, genv.nB);
+    ncolors = std::min(dpcp.get_nP(), dpcp.get_nQ());
     log << "No initial coloring found by heuristic." << std::endl;
   }
 
   // Initialize cplex enviroment
   IloEnv cxenv;
   IloModel cxmodel(cxenv);
-  IloArray<IloNumVarArray> x(cxenv, num_vertices(graph));
+  IloArray<IloNumVarArray> x(cxenv, num_vertices(dpcp.get_graph()));
   IloNumVarArray w(cxenv, ncolors);
   IloConstraintArray cxcons(cxenv);
 
   // Define variables
-  for (size_t v = 0; v < num_vertices(graph); ++v) {
+  for (size_t v = 0; v < num_vertices(dpcp.get_graph()); ++v) {
     x[v] = IloNumVarArray(cxenv, ncolors);
     for (size_t k = 0; k < ncolors; ++k) {
       char name[100];
@@ -72,21 +71,26 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
   // Constraints
 
   // \sum_{(a,b) \in V} \sum_{k \in C} x_(a,b)_k \geq 1, forall a \in A
-  for (auto &[a, vec] : genv.Va) {
+  for (size_t pi = 0; pi < dpcp.get_nP(); ++pi) {
+    auto &vec = dpcp.get_P_parts()[pi];
     IloExpr restr(cxenv);
     for (Vertex v : vec)
       for (size_t k = 0; k < ncolors; ++k)
-        restr += x[graph[v].id][k];
+        restr += x[dpcp.get_current_id(v)][k];
     cxcons.add(restr >= 1);
   }
 
   // x_(a,b)_k + x_(a',b)_k' \leq 1, forall (a,b),(a',b) \in V with a != a',
   //                                         k, k' \in C with k != k'
-  for (auto v1 : boost::make_iterator_range(vertices(graph))) {
-    auto [a1, b1, id1] = graph[v1];
-    for (auto v2 : boost::make_iterator_range(vertices(graph))) {
-      auto [a2, b2, id2] = graph[v2];
-      if ((b1 != b2) || (a1 == a2))
+  for (auto v1 : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
+    size_t pi1 = dpcp.get_P_part(v1);
+    size_t qj1 = dpcp.get_Q_part(v1);
+    size_t id1 = dpcp.get_current_id(v1);
+    for (auto v2 : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
+      size_t pi2 = dpcp.get_P_part(v2);
+      size_t qj2 = dpcp.get_Q_part(v2);
+      size_t id2 = dpcp.get_current_id(v2);
+      if ((qj1 != qj2) || (pi1 == pi2))
         continue;
       for (size_t k1 = 0; k1 < ncolors; ++k1)
         for (size_t k2 = 0; k2 < ncolors; ++k2) {
@@ -100,12 +104,12 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
   }
 
   // x_(a,b)_k + x_(a',b')_k \leq w_k, forall ((a,b),(a',b')) \in E, k \in C
-  for (auto e : boost::make_iterator_range(edges(graph))) {
-    auto u = source(e, graph);
-    auto v = target(e, graph);
+  for (auto e : boost::make_iterator_range(edges(dpcp.get_graph()))) {
+    auto u = source(e, dpcp.get_graph());
+    auto v = target(e, dpcp.get_graph());
     for (size_t k = 0; k < ncolors; ++k) {
       IloExpr restr(cxenv);
-      restr += x[graph[u].id][k] + x[graph[v].id][k] - w[k];
+      restr += x[dpcp.get_current_id(u)][k] + x[dpcp.get_current_id(v)][k] - w[k];
       cxcons.add(restr <= 0);
     }
   }
@@ -122,7 +126,7 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
     IloNumVarArray startVar(cxenv);
     IloNumArray startVal(cxenv);
     for (auto [v, k] : coloring) {
-      startVar.add(x[graph[v].id][k]);
+      startVar.add(x[dpcp.get_current_id(v)][k]);
       startVal.add(1);
     }
     for (auto &[k, s] : classes) {
@@ -171,11 +175,11 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
 
   if (state == OPTIMAL || state == FEASIBLE) {
     // Recover coloring
-    for (auto v : boost::make_iterator_range(vertices(graph)))
+    for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
       for (size_t k = 0; k < ncolors; ++k)
-        if (cplex.getValue(x[graph[v].id][k]) > 0.5)
-          col.set_color(graph, v, k);
-    assert(col.check_coloring(graph));
+        if (cplex.getValue(x[dpcp.get_current_id(v)][k]) > 0.5)
+          col.set_color(dpcp, v, k);
+    assert(col.check_coloring(dpcp));
   }
 
   // Complete stats
@@ -194,7 +198,7 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
   // Free memory
   fobj.end();
   cxcons.end();
-  for (size_t v = 0; v < num_vertices(graph); ++v)
+  for (size_t v = 0; v < num_vertices(dpcp.get_graph()); ++v)
     x[v].end();
   x.end();
   w.end();
@@ -204,3 +208,4 @@ Stats solve_ilp(Graph &graph, const Params &params, std::ostream &log,
 
   return stats;
 }
+

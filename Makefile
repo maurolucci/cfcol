@@ -47,6 +47,9 @@ lp.o: src/lp.cpp include/lp.hpp include/col.hpp include/cplex_env.hpp \
 include/graph.hpp include/stats.hpp include/params.hpp include/feas.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
 
+bp.o: src/bp.cpp include/bp.hpp include/lp.hpp include/col.hpp include/stats.hpp
+	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
+
 feas.o: src/feas.cpp include/graph.hpp include/stats.hpp include/pricing.hpp \
 include/col.hpp include/feas.hpp include/params.hpp include/heur.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS)
@@ -56,7 +59,7 @@ include/col.hpp include/compact_ilp.hpp include/stats.hpp include/params.hpp \
 include/feas.hpp
 	$(CC) -c -o $@ $< $(CCOPT) $(CCINFLAGS) $(CPLEXFLAGS) $(BOOSTLIB)
 
-dpcp: main.o lp.o col.o compact_ilp.o graph.o stats.o pricing.o heur.o feas.o \
+dpcp: main.o bp.o lp.o col.o compact_ilp.o graph.o stats.o pricing.o heur.o feas.o \
 exactcolors/color.o exactcolors/color_version.h exactcolors/util.o \
 exactcolors/rounding_mode.o exactcolors/cliq_enum.o exactcolors/color_parms.o \
 exactcolors/graph.o exactcolors/lpcplex.o exactcolors/bbsafe.o \

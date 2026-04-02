@@ -4,7 +4,6 @@
 #include <string>
 
 struct Params {
-
   // General options
   // timeLimit: overall time limit for the algorithm (in seconds)
   // dfs: use depth-first strategy in the B&P tree
@@ -63,32 +62,23 @@ struct Params {
   double initializationBigWeight;
 
   // Preprocessing options
-  // preprocStep1: make each V_a a clique
-  // preprocStep2: remove vertices for each a with |V_a| = 1
-  // preprocStep3: vanish isolated vertices
-  // preprocStep4: check if n = 1
-  bool preprocStep1;
-  bool preprocStep2;
-  bool preprocStep3;
-  bool preprocStep4;
-
-  // Column generation options
-  // usePool: use a pool of columns (not implemented yet)
-  bool usePool;
+  // preprocessing: run all preprocessing steps (clique V_a, remove |V_a|=1,
+  //   vanish isolated vertices, check if n=1)
+  bool preprocessing;
 
   // Pricing options
-  // pricingHeur1: use greedy heuristic for pricing
-  // pricingHeur2: use P,Q-MWSSP heuristic for pricing
-  // pricingHeur3: use P-MWSSP heuristic for pricing
-  // pricingOrder: order of pricing
-  //    1: pool -> greedy -> P,Q-MWSSP -> P-MWSSP
-  //    2: pool -> greedy -> P-MWSSP -> P,Q-MWSSP
-  // pricingHeur1MaxNCols: maximum number of columns to add with pricingHeur1
+  // pricingMethod: pricing strategy selector
+  //    0: ILP
+  //    1: greedy -> ILP
+  //    2: greedy -> P,Q-MWSSP -> ILP
+  //    3: greedy -> P-MWSSP -> ILP
+  //    4: greedy -> P,Q-MWSSP -> P-MWSSP -> ILP
+  //    5: greedy -> P-MWSSP -> P,Q-MWSSP -> ILP
+  //    6: automatic (depends on graph density)
+  // pricingHeur1MaxNCols: maximum number of columns to add with greedy
+  // pricing
   // pricingExactTimeLimit: time limit for exact pricing (in seconds)
-  bool pricingHeur1;
-  bool pricingHeur2;
-  bool pricingHeur3;
-  int pricingOrder;
+  int pricingMethod;
   double pricingHeur1Alpha;
   size_t pricingHeur1MaxNCols;
   size_t pricingExactTimeLimit;
@@ -96,77 +86,107 @@ struct Params {
   bool branchingFMS;
 
   Params()
-      : timeLimit(900), dfs(false), onlyRelaxation(false), heuristicRootNode(3),
-        heuristicOtherNodes(2), heuristic2stepVariant(3),
-        heuristicSemigreedyAlpha(0.2), heuristicSemigreedyIter(100),
-        feasibilityRootNode(2), feasibilityRootNodeTimeLimit(300),
-        feasibilityOtherNodes(2), feasibilityOtherNodesTimeLimit(60),
-        inheritColumns(0), initializationBigWeight(1000.0), preprocStep1(true),
-        preprocStep2(true), preprocStep3(true), preprocStep4(true),
-        usePool(false), pricingHeur1(true), pricingHeur2(true),
-        pricingHeur3(true), pricingOrder(1), pricingHeur1Alpha(0.1),
-        pricingHeur1MaxNCols(1), pricingExactTimeLimit(300),
-        branchingFMS(false){};
+      : timeLimit(900),
+        dfs(false),
+        onlyRelaxation(false),
+        heuristicRootNode(3),
+        heuristicOtherNodes(2),
+        heuristic2stepVariant(3),
+        heuristicSemigreedyAlpha(0.2),
+        heuristicSemigreedyIter(100),
+        feasibilityRootNode(2),
+        feasibilityRootNodeTimeLimit(300),
+        feasibilityOtherNodes(2),
+        feasibilityOtherNodesTimeLimit(60),
+        inheritColumns(0),
+        initializationBigWeight(1000.0),
+        preprocessing(true),
+        pricingMethod(4),
+        pricingHeur1Alpha(0.1),
+        pricingHeur1MaxNCols(1),
+        pricingExactTimeLimit(300),
+        branchingFMS(false) {};
+
+  std::string get_pricing_method_name(int method) {
+    switch (method) {
+      case 0:
+        return " (ILP)";
+      case 1:
+        return " (greedy -> ILP)";
+      case 2:
+        return " (greedy -> P,Q-MWSSP -> ILP)";
+      case 3:
+        return " (greedy -> P-MWSSP -> ILP)";
+      case 4:
+        return " (greedy -> P,Q-MWSSP -> P-MWSSP -> ILP)";
+      case 5:
+        return " (greedy -> P-MWSSP -> P,Q-MWSSP -> ILP)";
+      case 6:
+        return " (auto by density)";
+      default:
+        return " (unknown)";
+    }
+  };
 
   std::string get_heur_name(int heur) {
     switch (heur) {
-    case 0:
-      return " (none)";
-    case 1:
-      return " (greedy 1-step)";
-    case 2:
-      return " (greedy 2-step)";
-    case 3:
-      return " (semi-greedy 2-step)";
-    default:
-      return " (unknown)";
+      case 0:
+        return " (none)";
+      case 1:
+        return " (greedy 1-step)";
+      case 2:
+        return " (greedy 2-step)";
+      case 3:
+        return " (semi-greedy 2-step)";
+      default:
+        return " (unknown)";
     }
   };
 
   std::string get_heur_variant(int variant) {
     switch (variant) {
-    case 0:
-      return " (deg-real)";
-    case 1:
-      return " (deg-Q)";
-    case 2:
-      return " (deg-collapsed)";
-    case 3:
-      return " (edge)";
-    case 4:
-      return " (auto)";
-    default:
-      return " (unknown)";
+      case 0:
+        return " (deg-real)";
+      case 1:
+        return " (deg-Q)";
+      case 2:
+        return " (deg-collapsed)";
+      case 3:
+        return " (edge)";
+      case 4:
+        return " (auto)";
+      default:
+        return " (unknown)";
     }
   };
 
   std::string get_feas_name(int feas) {
     switch (feas) {
-    case 0:
-      return " (none)";
-    case 1:
-      return " (enumerative)";
-    case 2:
-      return " (ilp)";
-    default:
-      return " (unknown)";
+      case 0:
+        return " (none)";
+      case 1:
+        return " (enumerative)";
+      case 2:
+        return " (ilp)";
+      default:
+        return " (unknown)";
     }
   };
 
   std::string get_inherit_name(int inherit) {
     switch (inherit) {
-    case 0:
-      return " (none)";
-    case 1:
-      return " (all)";
-    case 2:
-      return " (positive)";
-    default:
-      return " (unknown)";
+      case 0:
+        return " (none)";
+      case 1:
+        return " (all)";
+      case 2:
+        return " (positive)";
+      default:
+        return " (unknown)";
     }
   };
 
-  void print_params(std::ostream &out) {
+  void print_params(std::ostream& out) {
     out << "*** Parameters ***:" << std::endl;
     out << "Time limit: " << timeLimit << " seconds" << std::endl;
     out << "DFS strategy: " << (dfs ? "enabled" : "disabled") << std::endl;
@@ -206,28 +226,15 @@ struct Params {
         << get_inherit_name(inheritColumns) << std::endl;
     out << "Initialization big weight: " << initializationBigWeight
         << std::endl;
-    out << "Preprocessing step 1 (clique V_a): "
-        << (preprocStep1 ? "enabled" : "disabled") << std::endl;
-    out << "Preprocessing step 2 (remove |V_a|=1): "
-        << (preprocStep2 ? "enabled" : "disabled") << std::endl;
-    out << "Preprocessing step 3 (vanish isolated): "
-        << (preprocStep3 ? "enabled" : "disabled") << std::endl;
-    out << "Preprocessing step 4 (check if n = 1): "
-        << (preprocStep4 ? "enabled" : "disabled") << std::endl;
-    out << "Use column pool: " << (usePool ? "enabled" : "disabled")
-        << std::endl;
-    out << "Pricing heuristic 1 (greedy): "
-        << (pricingHeur1 ? "enabled" : "disabled")
-        << ", max columns: " << pricingHeur1MaxNCols << std::endl;
-    out << "Pricing heuristic 2 (P,Q-MWSSP): "
-        << (pricingHeur2 ? "enabled" : "disabled") << std::endl;
-    out << "Pricing heuristic 3 (P-MWSSP): "
-        << (pricingHeur3 ? "enabled" : "disabled") << std::endl;
-    out << "Pricing order: " << pricingOrder << std::endl;
+    out << "Preprocessing: "
+        << (preprocessing ? "enabled" : "disabled") << std::endl;
+    out << "Pricing method: " << pricingMethod
+        << get_pricing_method_name(pricingMethod) << std::endl;
+    out << "Pricing greedy max columns: " << pricingHeur1MaxNCols << std::endl;
     out << "Pricing heuristic 1 alpha: " << pricingHeur1Alpha << std::endl;
     out << "Pricing exact time limit: " << pricingExactTimeLimit << " seconds"
         << std::endl;
   }
 };
 
-#endif // _PARAMS_HPP_
+#endif  // _PARAMS_HPP_

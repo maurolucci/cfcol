@@ -1,16 +1,16 @@
 #!/bin/bash
 
-declare -a N=("130" "150" "170")
+declare -a N=("70" "80" "90")
 declare -a P=("0.25" "0.5" "0.75")
 declare -a NA=("0.1" "0.2")
 declare -a NB=("0.1" "0.2")
 declare num="5"
 
 SRC="gen_random_dpcp1.py"
-OUT="dpcp/random"
+OUT="dpcp/random/er2"
 
 mkdir -p dpcp
-mkdir -p dpcp/random
+mkdir -p dpcp/random/er2
 
 for i in "${!N[@]}"
 do

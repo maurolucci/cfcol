@@ -1,0 +1,284 @@
+#include "bp.hpp"
+
+#include <cmath>
+#include <iomanip>
+
+namespace {
+constexpr double kGapDenominatorEpsilon = 1e-6;
+constexpr double kLogIntervalSeconds = 10.0;
+
+inline bool should_prune_by_bound(double lowerBound, double primalBound) {
+  return std::ceil(lowerBound - EPSILON_BP) >= primalBound;
+}
+}  // namespace
+
+Node::Node(LP lp) : lp(std::move(lp)) {}
+
+double Node::get_obj_value() const { return lp.get_lower_bound(); }
+
+bool Node::operator>(const Node& n) const {
+  return (get_obj_value() > n.get_obj_value());
+}
+
+LP_STATE Node::solve(double timelimit, double ub) {
+  return lp.solve(timelimit, ub);
+}
+
+bool Node::feas_sol() const { return lp.has_heur_solution(); }
+
+size_t Node::feas_value() const { return lp.get_upper_bound(); }
+
+void Node::save(Col& sol) { sol = lp.get_lp_solution(); }
+
+void Node::save_heur(Col& sol) { sol = lp.get_heur_solution(); }
+
+std::vector<Node> Node::branch() {
+  std::vector<LP> lps = lp.branch();
+  std::vector<Node> sons;
+
+  sons.reserve(lps.size());
+  for (auto& x : lps) sons.emplace_back(std::move(x));
+  return sons;
+}
+
+BP::BP(Params& params, std::ostream& log, Col& sol, double ub)
+    : params(params),
+      best_integer_solution(sol),
+      primal_bound(ub),
+      nodes(0),
+      first_call(true),
+      log(log),
+      stats() {}
+
+Stats BP::solve(Node root) {
+  start_t = ClockType::now();
+  last_t = start_t;
+  first_call = true;
+
+  // Push root node (and solve initial LR)
+  switch (push(std::move(root))) {
+    case LP_TIME_EXCEEDED:
+      return return_stats(TIME_EXCEEDED_LP);
+    case LP_TIME_EXCEEDED_PR:
+      return return_stats(TIME_EXCEEDED_PR);
+    case LP_MEM_EXCEEDED:
+      return return_stats(MEM_EXCEEDED_LP);
+    case LP_MEM_EXCEEDED_PR:
+      return return_stats(MEM_EXCEEDED_PR);
+    case LP_INIT_FAIL:
+      return return_stats(INIT_FAIL);
+    default:
+      break;
+  }
+
+  if (!params.onlyRelaxation) {
+    while (!L.empty()) {
+      // Pop next node
+      show_stats();  // First show_stats, then pop
+      Node node = std::move(L.back());
+      pop();
+
+      // Re-try to prune by bound, since primal_bound could have been improved
+      if (ceil(node.get_obj_value() - EPSILON_BP) >= primal_bound) continue;
+
+      // Branch
+      std::vector<Node> sons = node.branch();
+
+      // Push sons (and solve initial LR)
+      for (auto& n : sons) {
+        switch (push(std::move(n))) {
+          case LP_TIME_EXCEEDED:
+            return return_stats(TIME_EXCEEDED_LP);
+          case LP_TIME_EXCEEDED_PR:
+            return return_stats(TIME_EXCEEDED_PR);
+          case LP_MEM_EXCEEDED:
+            return return_stats(MEM_EXCEEDED_LP);
+          case LP_MEM_EXCEEDED_PR:
+            return return_stats(MEM_EXCEEDED_PR);
+          case LP_INIT_FAIL:
+            return return_stats(INIT_FAIL);
+          default:
+            break;
+        }
+      }
+    }
+  }
+
+  if (primal_bound == DBL_MAX) return return_stats(INFEASIBLE);
+
+  if (params.onlyRelaxation && !L.empty()) return return_stats(FEASIBLE);
+
+  return return_stats(OPTIMAL);
+}
+
+size_t BP::get_nodes() { return nodes; }
+
+double BP::get_gap() {
+  const double dual_bound = calculate_dual_bound();
+  double gap = DBL_MAX;
+  if (dual_bound != -DBL_MAX)
+    gap = std::fabs(dual_bound - primal_bound) /
+          (kGapDenominatorEpsilon + std::fabs(primal_bound)) * 100;
+  return gap;
+}
+
+double BP::get_primal_bound() { return primal_bound; }
+
+Stats BP::return_stats(STATE state) {
+  stats.state = state;
+  stats.time =
+      std::chrono::duration<double>(ClockType::now() - start_t).count();
+  if (stats.time > params.timeLimit) {
+    stats.time = params.timeLimit;
+    stats.state = primal_bound == DBL_MAX ? TIME_EXCEEDED : FEASIBLE;
+  }
+  stats.nodes = static_cast<int>(nodes);
+  stats.nodesLeft = static_cast<int>(L.size());
+  stats.ub = static_cast<int>(primal_bound + 0.5);
+  if (state == OPTIMAL) {
+    stats.lb = primal_bound;
+    stats.gap = 0.0;
+  } else if (state != INFEASIBLE) {
+    stats.lb = calculate_dual_bound();
+    stats.gap = get_gap() / 100;
+  }
+
+  return stats;
+}
+
+LP_STATE BP::push(Node node) {
+  nodes++;
+  double obj_value;
+
+  // Solve the linear relaxation of the node and prune if possible
+  const double elapsed =
+      std::chrono::duration<double>(ClockType::now() - start_t).count();
+  LP_STATE state = node.solve(params.timeLimit - elapsed, primal_bound);
+
+  // If a better feasible solution was found, save it
+  if (node.feas_sol()) {
+    obj_value = node.feas_value();
+    if (obj_value < primal_bound) {
+      stats.nsolHeur++;
+      node.save_heur(best_integer_solution);
+      log << "New best integer solution found by heuristic with value: "
+          << obj_value << std::endl;
+      update_primal_bound(obj_value);
+    }
+  }
+
+  switch (state) {
+    case LP_INTEGER:
+      obj_value = node.get_obj_value();
+      if (obj_value < primal_bound) {
+        stats.nsolLR++;
+        node.save(best_integer_solution);
+        log << "New best integer solution found by LR with value: " << obj_value
+            << std::endl;
+        update_primal_bound(obj_value);
+      }
+      return state;  // Prune by optimality
+
+    case LP_FRACTIONAL:
+      obj_value = node.get_obj_value();
+      if (should_prune_by_bound(obj_value, primal_bound))
+        return state;  // Prune by bound
+      break;           // Do not prune
+
+    default:
+      return state;  // Prune by infeasibility or mem/time limit
+  }
+
+  if (params.dfs) {
+    L.push_back(std::move(node));
+    return LP_FRACTIONAL;
+  }
+
+  if (L.empty()) {
+    L.push_back(std::move(node));
+    return state;
+  }
+
+  const double node_obj_value = node.get_obj_value();
+  for (auto it = L.begin(); it != L.end(); ++it)
+    if (node_obj_value > it->get_obj_value()) {
+      L.insert(it, std::move(node));
+      return state;
+    }
+
+  L.push_back(std::move(node));
+  return state;
+}
+
+Node& BP::top() { return L.back(); }
+
+void BP::pop() { L.pop_back(); }
+
+void BP::update_primal_bound(double obj_value) {
+  primal_bound = obj_value;
+
+  if (params.dfs) {
+    for (auto it = L.begin(); it != L.end();) {
+      const double node_obj_value = it->get_obj_value();
+      if (node_obj_value >= primal_bound)
+        it = L.erase(it);
+      else
+        ++it;
+    }
+    return;
+  }
+
+  for (auto it = L.begin(); it != L.end();) {
+    const double node_obj_value = it->get_obj_value();
+    if (node_obj_value >= primal_bound)
+      it = L.erase(it);
+    else
+      break;  // Since the list is sorted, we can stop as soon as we find a node
+              // that cannot be pruned
+  }
+}
+
+double BP::calculate_dual_bound() {
+  double dual_bound = DBL_MAX;
+  if (!L.empty()) {
+    if (params.dfs) {
+      for (auto it = L.begin(); it != L.end(); ++it)
+        if (it->get_obj_value() < dual_bound) dual_bound = it->get_obj_value();
+    } else {
+      dual_bound = L.front().get_obj_value();
+    }
+  }
+
+  if (dual_bound == DBL_MAX) {
+    return -DBL_MAX;
+  }
+  return dual_bound;
+}
+
+void BP::show_stats() {
+  auto now_t = ClockType::now();
+
+  if (first_call)
+    first_call = false;
+  else {
+    if (std::chrono::duration<double>(now_t - last_t).count() <
+        kLogIntervalSeconds)
+      return;
+    last_t = now_t;
+  }
+
+  const double dual_bound = calculate_dual_bound();
+
+  log << std::fixed << std::setprecision(3);
+
+  log << "  Best obj value  = " << dual_bound << "\t Best int = ";
+  if (primal_bound == DBL_MAX)
+    log << "inf\t Gap = ---";
+  else
+    log << (int)(EPSILON_BP + primal_bound) << "\t Gap = "
+        << (primal_bound - dual_bound) / (EPSILON_BP + primal_bound) * 100
+        << "%";
+  log << "\t Nodes: processed = " << nodes << ", left = " << L.size()
+      << "\t time = " << std::chrono::duration<double>(now_t - start_t).count()
+      << std::endl;
+}

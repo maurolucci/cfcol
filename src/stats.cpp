@@ -30,7 +30,7 @@ std::string Stats::get_state_as_str() {
 void Stats::write_stats(std::ostream &file) {
   size_t onodes = nodes == 1 ? 1 : nodes - 1;
   file << instance << "," << solver << "," << run << "," << nvertices << ","
-       << nedges << "," << nA << "," << nB << "," << nvars << "," << ncons
+       << nedges << "," << nP << "," << nQ << "," << nvars << "," << ncons
        << "," << get_state_as_str() << "," << time << "," << nodes << ","
        << nodesLeft << "," << lb << "," << ub << "," << gap << ","
        << ninfeasPrepro + ninfeasCheck + ninfeasAux << "," << ninfeasPrepro
@@ -89,8 +89,8 @@ void Stats::print_stats(std::ostream &file) {
   file << "Run: " << run << std::endl;
   file << "Vertices: " << nvertices << std::endl;
   file << "Edges: " << nedges << std::endl;
-  file << "n: " << nA << std::endl;
-  file << "m: " << nB << std::endl;
+  file << "nP: " << nP << std::endl;
+  file << "nQ: " << nQ << std::endl;
   file << "Variables: " << nvars << std::endl;
   file << "Constraints: " << ncons << std::endl;
   file << "State: " << get_state_as_str() << std::endl;

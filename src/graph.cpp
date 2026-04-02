@@ -2,304 +2,306 @@
 
 #include <boost/graph/copy.hpp>
 
-// Read a DPCP instance from input stream
-// Returns the graph and the sizes of the two partitions
-std::tuple<Graph, size_t, size_t> read_dpcp_instance(std::istream &graph,
-                                                     std::istream &partA,
-                                                     std::istream &partB) {
-  Graph g;
-  size_t n, m, nA, nB;
-  size_t a, nVa, nVb;
-  char c;
-
-  // Read the partitions
-  std::map<size_t, size_t> vertexToA, vertexToB;
-  partA >> n >> c >> nA;
-  for (size_t i = 0; i < nA; ++i) {
-    partA >> a >> nVa;
-    for (size_t j = 0; j < nVa; ++j) {
-      size_t v;
-      partA >> v;
-      vertexToA[v] = a;
-    }
-  }
-  partB >> n >> c >> nB;
-  for (size_t i = 0; i < nB; ++i) {
-    partB >> a >> nVb;
-    for (size_t j = 0; j < nVb; ++j) {
-      size_t v;
-      partB >> v;
-      vertexToB[v] = a;
-    }
-  }
-
-  // Create vertices with their partition info
-  std::vector<Vertex> vertices(n);
-  for (size_t i = 0; i < n; ++i) {
-    TypeA a = vertexToA[i];
-    TypeB b = vertexToB[i];
-    vertices[i] = add_vertex(VertexInfo{a, b, i}, g);
-  }
-
-  // Add edges
-  graph >> n >> c >> m;
-  for (size_t i = 0; i < m; ++i) {
-    size_t u, v;
-    graph >> u >> v;
-    add_edge(vertices[u], vertices[v], g);
-  }
-
-  return std::make_tuple(g, nA, nB);
+// Graph copying utilities
+// Copies the graph structure from src to dst, using vertex2CurrentId to map
+// vertex descriptors.
+void graph_copy(const Graph& src, const VertexMap<size_t>& vertex2CurrentId,
+                Graph& dst) {
+  boost::copy_graph(src, dst,
+                    boost::vertex_index_map(
+                        boost::make_assoc_property_map(vertex2CurrentId)));
 }
 
-void get_gcp_graph(Graph &src, GCPGraph &dst, std::map<TypeB, size_t> &tyB2idB,
-                   std::vector<TypeB> &idB2TyB) {
-  // Add vertices
-  for (auto b : idB2TyB)
-    add_vertex(b, dst);
-  // Add edges
-  for (auto e : boost::make_iterator_range(edges(src))) {
-    auto b1 = src[source(e, src)].second;
-    auto b2 = src[target(e, src)].second;
-    if (!edge(tyB2idB[b1], tyB2idB[b2], dst).second)
-      add_edge(tyB2idB[b1], tyB2idB[b2], dst);
-  }
-}
-
-void graph_copy(const Graph &src, const std::map<Vertex, size_t> &getId,
-                Graph &dst) {
-  boost::copy_graph(
-      src, dst, boost::vertex_index_map(boost::make_assoc_property_map(getId)));
-}
-
-void graph_copy(const Graph &src, Graph &dst) {
-  // boost::copy_graph needs a map from Vertex to size_t
-  std::map<Vertex, size_t> index;
+// Copies the graph structure from src to dst
+// Internally, it creates a vertex2CurrentId map that maps vertex descriptors to
+// their indices in src.
+void graph_copy(const Graph& src, Graph& dst) {
+  VertexMap<size_t> vertex2CurrentId;
   for (auto v : boost::make_iterator_range(vertices(src)))
-    index.insert(std::make_pair(v, index.size()));
-  graph_copy(src, index, dst);
+    vertex2CurrentId[v] = vertex2CurrentId.size();
+  graph_copy(src, vertex2CurrentId, dst);
 }
 
-// Vertex branching: v is colored
-// Warning: This function modifies the input graph
-void vertex_branching1(Graph &graph, Vertex v) {
-  TypeA a = graph[v].first;
-  TypeA b = graph[v].second;
-  auto [it_v, it_end] = vertices(graph);
-  for (auto next = it_v; it_v != it_end; it_v = next) {
-    next++;
-    if (graph[*it_v].first == a && graph[*it_v].second != b) {
-      clear_vertex(*it_v, graph);
-      remove_vertex(*it_v, graph);
+std::tuple<Graph, Partition, Partition> read_dpcp_instance(
+    std::istream& graph, std::istream& partP, std::istream& partQ) {
+  Graph g;
+  size_t n, m, nP, nQ;
+  size_t u, v;
+  size_t pi, qj, nPi, nQj;
+  char c;
+  Partition P, Q;
+
+  graph >> n >> c >> m;
+
+  for (size_t i = 0; i < n; ++i) {
+    add_vertex(VertexInfo{i}, g);
+  }
+
+  for (size_t i = 0; i < m; ++i) {
+    graph >> u >> v;
+    add_edge(vertex(u, g), vertex(v, g), g);
+  }
+
+  partP >> n >> c >> nP;
+  P.resize(nP);
+  for (size_t i = 0; i < nP; ++i) {
+    partP >> pi >> nPi;
+    for (size_t j = 0; j < nPi; ++j) {
+      partP >> v;
+      P[pi].push_back(vertex(v, g));
     }
+  }
+  partQ >> n >> c >> nQ;
+  Q.resize(nQ);
+  for (size_t j = 0; j < nQ; ++j) {
+    partQ >> qj >> nQj;
+    for (size_t k = 0; k < nQj; ++k) {
+      partQ >> v;
+      Q[qj].push_back(vertex(v, g));
+    }
+  }
+
+  return std::make_tuple(std::move(g), std::move(P), std::move(Q));
+}
+
+DPCPInst::DPCPInst(const Graph& graph, const Partition& P, const Partition& Q)
+    : graph(),
+      vertex2CurrentId(),
+      P(P),
+      Q(Q),
+      vertex2Ppart(),
+      vertex2Qpart(),
+      isGCP(false),
+      isInfeasible(false),
+      hasTrivialSolution(false),
+      isolated(),
+      density(0.0) {
+  // Copy the graph structure
+  graph_copy(graph, this->graph);
+
+  // Initialize vertex2CurrentId, vertex2Ppart and vertex2Qpart maps
+  for (Vertex v : boost::make_iterator_range(vertices(this->graph)))
+    vertex2CurrentId[v] = vertex2CurrentId.size();
+  isGCP = true;
+  for (size_t pi = 0; pi < this->P.size(); ++pi) {
+    if (P[pi].size() > 1) isGCP = false;
+    for (Vertex v : this->P[pi]) vertex2Ppart[v] = pi;
+  }
+  for (size_t qj = 0; qj < this->Q.size(); ++qj)
+    for (Vertex v : this->Q[qj]) vertex2Qpart[v] = qj;
+
+  // Compute density before preprocessing
+  size_t n = num_vertices(this->graph);
+  if (n > 1) {
+    density = static_cast<double>(num_edges(this->graph) * 2) /
+              static_cast<double>(n * (n - 1));
   }
 }
 
-// Vertex branching: v is not colored
-// Warning: This function modifies the input graph
-void vertex_branching2(Graph &graph, Vertex v) {
+DPCPInst::DPCPInst(const DPCPInst& dpcp)
+    : graph(),
+      vertex2CurrentId(),
+      P(),
+      Q(),
+      vertex2Ppart(),
+      vertex2Qpart(),
+      isGCP(dpcp.is_gcp_instance()),
+      isInfeasible(dpcp.is_infeasible_instance()),
+      hasTrivialSolution(dpcp.has_trivial_solution()),
+      isolated(dpcp.get_isolated_vertices()),
+      density(dpcp.get_density()) {
+  const Graph& srcGraph = dpcp.get_graph();
+  const VertexMap<size_t>& srcVertex2CurrentId = dpcp.get_vertex2CurrentId();
+  const Partition& srcP = dpcp.get_P();
+  const Partition& srcQ = dpcp.get_Q();
+
+  graph_copy(srcGraph, srcVertex2CurrentId, graph);
+
+  // Map from old vertices (original) to new vertices (copy)
+  // Careful: we cannot use vertex descriptors directly, as they may differ
+  // between the original and copied graph.
+  VertexMap<Vertex> vertexMap;
+  for (auto& [vOld, id] : srcVertex2CurrentId) {
+    Vertex vNew = vertex(id, graph);
+    vertexMap[vOld] = vNew;
+    vertex2CurrentId[vNew] = id;
+  }
+
+  P.resize(dpcp.get_nP(), std::vector<Vertex>());
+  for (size_t pi = 0; pi < dpcp.get_nP(); ++pi)
+    for (auto vOld : srcP[pi]) {
+      Vertex vNew = vertexMap[vOld];
+      P[pi].push_back(vNew);
+      vertex2Ppart[vNew] = pi;
+    }
+
+  Q.resize(dpcp.get_nQ(), std::vector<Vertex>());
+  for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj)
+    for (auto vOld : srcQ[qj]) {
+      Vertex vNew = vertexMap[vOld];
+      Q[qj].push_back(vNew);
+      vertex2Qpart[vNew] = qj;
+    }
+}
+
+DPCPInst::~DPCPInst() {}
+
+GCPGraph DPCPInst::get_gcp_graph() const {
+  GCPGraph gcpGraph;
+  // Add vertices
+  for (size_t qj = 0; qj < get_nQ(); ++qj) add_vertex(qj, gcpGraph);
+  // Add edges
+  for (auto e : boost::make_iterator_range(edges(graph))) {
+    auto b1 = get_Q_part(source(e, graph));
+    auto b2 = get_Q_part(target(e, graph));
+    if (!edge(b1, b2, gcpGraph).second) add_edge(b1, b2, gcpGraph);
+  }
+  return gcpGraph;
+}
+
+void DPCPInst::remove_vertex(Vertex v) {
+  size_t pi = get_P_part(v);
+  size_t qj = get_Q_part(v);
+
+  // First, we remove v from its P-part and Q-part. If any of the parts becomes
+  // empty, we need to remove it and update the corresponding maps as well.
+
+  auto it = std::find(P[pi].begin(), P[pi].end(), v);
+  assert(it != P[pi].end());  // v should be in P[pi]
+  P[pi].erase(it);
+  if (P[pi].empty()) {
+    isInfeasible = true;
+    for (auto it_i = pi + 1; it_i < P.size(); ++it_i) {
+      P[it_i - 1] = std::move(P[it_i]);
+      for (auto v : P[it_i - 1]) vertex2Ppart[v] = it_i - 1;
+    }
+    P.pop_back();
+  }
+
+  it = std::find(Q[qj].begin(), Q[qj].end(), v);
+  assert(it != Q[qj].end());  // v should be in Q[qj]
+  Q[qj].erase(it);
+  if (Q[qj].empty()) {
+    for (auto it_j = qj + 1; it_j < Q.size(); ++it_j) {
+      Q[it_j - 1] = std::move(Q[it_j]);
+      for (auto v : Q[it_j - 1]) vertex2Qpart[v] = it_j - 1;
+    }
+    Q.pop_back();
+  }
+
+  vertex2Ppart.erase(v);
+  vertex2Qpart.erase(v);
+
+  // Finally, we remove the vertex from the graph and update vertex2CurrentId
+
   clear_vertex(v, graph);
-  remove_vertex(v, graph);
+  boost::remove_vertex(v, graph);
+
+  vertex2CurrentId.clear();
+  for (auto v : boost::make_iterator_range(vertices(graph)))
+    vertex2CurrentId[v] = vertex2CurrentId.size();
 }
 
-GraphEnv::GraphEnv(Graph *graph, bool preprocess1, bool preprocess2,
-                   bool preprocess3, bool preprocess4, bool isRoot)
-    : graphPtr(graph), graph(*graph), getId(), nA(0), nB(0), Va(), Vb(),
-      tyA2idA(), tyB2idB(), idA2TyA(), idB2TyB(), snd(), isRoot(isRoot),
-      isGCP(true), isInfeasible(false), hasTrivialSolution(false), isolated() {
-  // Density
-  density = static_cast<double>((num_edges(*graph)) * 2) /
-            (num_vertices(*graph) * (num_vertices(*graph) - 1));
-  // First, apply preprocessing
-  preprocess(preprocess1, preprocess2, preprocess3, preprocess4);
-  // Then, initialize the other struct members
-  init_graphenv();
-};
-
-GraphEnv::~GraphEnv(){};
-
-void GraphEnv::preprocess(bool preprocess1, bool preprocess2, bool preprocess3,
-                          bool preprocess4) {
-  init_preprocess();
-  if (preprocess1 && isRoot)
-    preprocess_step1();
-  if (preprocess2)
-    preprocess_step2();
-  if (preprocess3)
-    preprocess_step3();
-  if (preprocess4)
-    preprocess_step4();
+void DPCPInst::preprocess(bool clique) {
+  if (clique) preprocess_step1();
+  preprocess_step2();
+  preprocess_step3();
+  preprocess_step4();
 }
 
-// Initialize preprocessing
-void GraphEnv::init_preprocess() {
-  // Initialize tyA2idA, nA (|A|) and snd (V_a, for all a in A)
-  // (necessary for preprocessing)
-  for (auto v : boost::make_iterator_range(vertices(graph))) {
-    TypeA a = graph[v].first;
-    bool retA = tyA2idA.insert({a, nA}).second;
-    if (retA) {
-      snd.push_back(std::vector<Vertex>{v});
-      nA++;
-    } else
-      snd[tyA2idA[a]].push_back(v);
+// Preprocess #1: Make each P-part a clique by adding missing edges.
+void DPCPInst::preprocess_step1() {
+  isGCP = true;
+  for (size_t pi = 0; pi < get_nP(); ++pi) {
+    for (auto it_u = P[pi].begin(); it_u != P[pi].end(); ++it_u)
+      for (auto it_v = std::next(it_u); it_v != P[pi].end(); ++it_v)
+        if (!edge(*it_u, *it_v, graph).second) add_edge(*it_u, *it_v, graph);
   }
 }
 
-// Warring: This function changes the stored graph by adding new edges
-void GraphEnv::preprocess_step1() {
-  // 1. Make each V_a a clique
-  for (size_t id_a = 0; id_a < nA; id_a++) {
-    auto it1 = snd[id_a].begin();
-    auto it2 = std::next(it1);
-    for (; it2 != snd[id_a].end(); ++it1, ++it2)
-      if (!edge(*it1, *it2, graph).second)
-        add_edge(*it1, *it2, graph);
-  }
-}
-
-// Warring: This function changes the stored graph by removing edges and
-// vertices
-void GraphEnv::preprocess_step2() {
-  // 2. Iteratively, for all a with |V_a| = 1, wlog V_a = {(a, b_a)},
-  // remove N(a,b_a) \cap V_{b_a}. If some V_a = {}, the instance is
-  // infeasible.
-
-  // Push candidates (a with |V_a| = 1) into a queue
-  std::list<TypeA> queue;
-  for (size_t id_a = 0; id_a < nA; id_a++)
-    if (snd[id_a].size() == 1)
-      queue.push_back(id_a);
-
-  // Process candidates
-  while (!queue.empty()) {
-    // Pop from queue
-    size_t id_a = queue.front();
-    queue.pop_front();
-    auto v = snd[id_a].front(); // |V_a| = 1
-    auto b = graph[v].second;
-    // Remove neighbors of v with common b
-    auto [it_u, it_end] = adjacent_vertices(v, graph);
-    for (auto next = it_u; it_u != it_end; it_u = next) {
-      ++next;
-      TypeA au = graph[*it_u].first;
-      TypeB bu = graph[*it_u].second;
-      if (bu == b) {
-        // First, remove vertex u from V_{au}
-        size_t id_au = tyA2idA[au];
-        auto it = std::find(snd[id_au].begin(), snd[id_au].end(), *it_u);
-        snd[id_au].erase(it);
-        // Check |V_{au}|
-        if (snd[id_au].size() == 1)
-          // Push u into the queue
-          queue.push_back(id_au);
-        else if (snd[id_au].size() == 0) {
-          // Infeasibility detected
-          isInfeasible = true;
-          return;
+// Preprocess #2: If a P-part has only one vertex v, we remove their neighbors
+// in the same Q-part as v.
+void DPCPInst::preprocess_step2() {
+  for (size_t pi = 0; pi < get_nP(); ++pi)
+    if (P[pi].size() == 1) {
+      Vertex v = P[pi].front();
+      bool removed = false;
+      auto [it_u, it_end] = adjacent_vertices(v, graph);
+      for (auto next = it_u; it_u != it_end; it_u = next) {
+        ++next;
+        Vertex u = *it_u;
+        if (get_Q_part(u) == get_Q_part(v)) {
+          remove_vertex(u);
+          removed = true;
         }
-        // Then, remove the vertex from the graph
-        auto vu = *it_u;
-        clear_vertex(vu, graph);
-        remove_vertex(vu, graph);
       }
+      // The removal of u may create new P-parts of size 1, so we need to repeat
+      // the process until no more vertices can be removed.
+      if (removed) return preprocess_step2();
     }
-  }
 }
 
-// Warring: This function changes the stored graph by removing isolated vertices
-void GraphEnv::preprocess_step3() {
-  // 3. Vanish isolated vertices
+// Preprocess #3: Remove isolated vertices.
+void DPCPInst::preprocess_step3() {
+  bool oldFeasibility = isInfeasible;
   auto [it_u, it_end] = vertices(graph);
   for (auto next = it_u; it_u != it_end; it_u = next) {
     ++next;
-    if (degree(*it_u, graph) == 0) {
-      auto vi = graph[*it_u];
-      isolated.push_back(vi);
-      clear_vertex(*it_u, graph);
-      remove_vertex(*it_u, graph);
-      nA--;
+    Vertex u = *it_u;
+    if (degree(u, graph) == 0) {
+      // Since we complete cliques, u should be the only vertex in its P-part
+      assert(P[get_P_part(u)].size() == 1);
+      // Save the original id of u
+      isolated.push_back(IsolatedVertex{graph[u].id});
+      remove_vertex(u);
     }
   }
+  // The removal of a vertex can raise infeasibility, but the removal of
+  // isolated vertices do not change the feasibility of the instance, so we
+  // restore the original feasibility value.
+  isInfeasible = oldFeasibility;
 }
 
-void GraphEnv::preprocess_step4() {
-  // 4. Check if n = 1
-  if (nA == 1)
-    hasTrivialSolution = true;
+// Preprocess #4: If there is only one P-part, then we have a trivial
+// solution.
+void DPCPInst::preprocess_step4() {
+  if (get_nP() == 1) hasTrivialSolution = true;
 }
 
-void GraphEnv::init_graphenv() {
-
-  // Reset structs intiliazed during preprocessing
-  nA = 0;
-  tyA2idA.clear();
-  snd.clear();
-
-  std::set<TypeB> B;
-
-  // Initialize the other struct members
-  for (auto v : boost::make_iterator_range(vertices(graph))) {
-    getId.insert(std::make_pair(v, getId.size()));
-    TypeA a = graph[v].first;
-    TypeB b = graph[v].second;
-    bool retA = tyA2idA.insert({a, nA}).second;
-    // bool retB = tyB2idB.insert({b, nB}).second;
-    bool retB = B.insert(b).second;
-    if (retA) {
-      idA2TyA.push_back(a);
-      snd.push_back(std::vector<Vertex>{v});
-      Va.emplace(a, std::vector<Vertex>{v});
-      nA++;
-    } else {
-      snd[tyA2idA[a]].push_back(v);
-      Va[a].push_back(v);
-      isGCP = false;
-    }
-    if (retB) {
-      Vb.emplace(b, std::vector<Vertex>{v});
-      nB++;
-    } else {
-      Vb[b].push_back(v);
-    }
-  }
-
-  // Use B to initializa idB2TyB
-  for (const auto &b : B)
-    idB2TyB.push_back(b);
-
-  // Sort idB2TyB by decreasing order of |Vb|
-  std::sort(idB2TyB.begin(), idB2TyB.end(),
-            [this](const TypeB b1, const TypeB b2) {
-              return Vb[b1].size() > Vb[b2].size();
-            });
-
-  // Initialize tyB2idB
-  for (size_t i = 0; i < idB2TyB.size(); ++i)
-    tyB2idB[idB2TyB[i]] = i;
+void DPCPInst::preselect_vertex(Vertex v) {
+  size_t pi = get_P_part(v);
+  assert(P[pi].size() > 1);
+  // Local copy of the P-part, as we will modify it during the loop
+  VertexVector Pi(P[pi]);
+  for (auto u : Pi)
+    if (u != v) remove_vertex(u);
 }
 
-StableEnv::StableEnv() : stable(), as(), bs(), cost(0.0){};
+void DPCPInst::forbid_vertex(Vertex v) { remove_vertex(v); }
 
-StableEnv::StableEnv(VertexVector &stable, std::set<TypeA> &as,
-                     std::set<TypeB> &bs, double cost)
-    : StableEnv(VertexVector{stable}, std::set<TypeA>{as}, std::set<TypeB>{bs},
-                cost) {}
+StableEnv::StableEnv() : stable(), ps(), qs(), cost(0.0) {}
 
-StableEnv::StableEnv(VertexVector &&stable, std::set<TypeA> &&as,
-                     std::set<TypeB> &&bs, double cost)
-    : stable(stable), as(as), bs(bs), cost(cost) {}
+StableEnv::StableEnv(VertexVector& stable, std::set<size_t>& ps,
+                     std::set<size_t>& qs, double cost)
+    : StableEnv(VertexVector{stable}, std::set<size_t>{ps},
+                std::set<size_t>{qs}, cost) {}
 
-bool StableEnv::check(const Graph &graph) {
+StableEnv::StableEnv(VertexVector&& stable, std::set<size_t>&& ps,
+                     std::set<size_t>&& qs, double cost)
+    : stable(std::move(stable)),
+      ps(std::move(ps)),
+      qs(std::move(qs)),
+      cost(cost) {}
+
+bool StableEnv::check(const Graph& graph) {
   for (auto it_v = stable.begin(); it_v != stable.end(); ++it_v)
     for (auto it_u = std::next(it_v); it_u != stable.end(); ++it_u)
-      if (edge(*it_v, *it_u, graph).second)
-        return false;
+      if (edge(*it_v, *it_u, graph).second) return false;
   return true;
 }
 
-void StableEnv::add_vertex(const Vertex v, const TypeA a, const TypeB b) {
+void StableEnv::add_vertex(const Vertex v, size_t pi, size_t qj) {
   stable.push_back(v);
-  as.insert(a);
-  bs.insert(b);
+  ps.insert(pi);
+  qs.insert(qj);
 }

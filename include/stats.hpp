@@ -25,6 +25,7 @@ enum LP_STATE {
   LP_MEM_EXCEEDED,
   LP_MEM_EXCEEDED_PR,
   LP_INIT_FAIL,
+  LP_UNKNOWN,
 };
 
 enum STATE {
@@ -42,8 +43,7 @@ enum STATE {
 };
 
 class Stats {
-
-public:
+ public:
   // Instance name
   std::string instance;
   // Solver name
@@ -54,10 +54,10 @@ public:
   int nvertices;
   // Number of edges
   int nedges;
-  // Cardinality of A
-  int nA;
-  // Cardinality of B
-  int nB;
+  // Number of parts in P
+  int nP;
+  // Number of parts in Q
+  int nQ;
   // Number of variables
   int nvars;
   // Number of constraints
@@ -120,34 +120,77 @@ public:
       otherNodesTimeMwis2, otherNodesTimeExact;
 
   Stats()
-      : instance(""), solver(""), run(-1), nvertices(-1), nedges(-1), nA(-1),
-        nB(-1), nvars(-1), ncons(-1), state(UNKNOWN), time(0.0), nodes(0),
-        nodesLeft(0), lb(-1.0), ub(-1), gap(-1.0), ninfeasPrepro(0),
-        ninfeasCheck(0), ninfeasAux(0), nint(0), ntrivial(0), ngcp(0),
-        gcpTime(0.0), nsolHeur(0), nsolLR(0), rootlb(-1.0), rootub(-1),
-        rootHeurTime(0.0), rootFeasTime(0.0), rootNColsPool(0),
-        rootNColsHeur(0), rootNColsMwis1(0), rootNColsMwis2(0),
-        rootNColsExact(0), rootNCallsPool(0), rootNCallsHeur(0),
-        rootNCallsMwis1(0), rootNCallsMwis2(0), rootNCallsExact(0),
-        rootTimePool(0.0), rootTimeHeur(0.0), rootTimeMwis1(0.0),
-        rootTimeMwis2(0.0), rootTimeExact(0.0), otherNodesHeurTime(0.0),
-        otherNodesFeasNCalls(0), otherNodesFeasTime(0.0),
-        otherNodesNColsPool(0), otherNodesNColsHeur(0), otherNodesNColsMwis1(0),
-        otherNodesNColsMwis2(0), otherNodesNColsExact(0),
-        otherNodesNCallsPool(0), otherNodesNCallsHeur(0),
-        otherNodesNCallsMwis1(0), otherNodesNCallsMwis2(0),
-        otherNodesNCallsExact(0), otherNodesTimePool(0.0),
-        otherNodesTimeHeur(0.0), otherNodesTimeMwis1(0.0),
-        otherNodesTimeMwis2(0.0), otherNodesTimeExact(0.0) {}
+      : instance(""),
+        solver(""),
+        run(-1),
+        nvertices(-1),
+        nedges(-1),
+        nP(-1),
+        nQ(-1),
+        nvars(-1),
+        ncons(-1),
+        state(UNKNOWN),
+        time(0.0),
+        nodes(0),
+        nodesLeft(0),
+        lb(-1.0),
+        ub(-1),
+        gap(-1.0),
+        ninfeasPrepro(0),
+        ninfeasCheck(0),
+        ninfeasAux(0),
+        nint(0),
+        ntrivial(0),
+        ngcp(0),
+        gcpTime(0.0),
+        nsolHeur(0),
+        nsolLR(0),
+        rootlb(-1.0),
+        rootub(-1),
+        rootHeurTime(0.0),
+        rootFeasTime(0.0),
+        rootNColsPool(0),
+        rootNColsHeur(0),
+        rootNColsMwis1(0),
+        rootNColsMwis2(0),
+        rootNColsExact(0),
+        rootNCallsPool(0),
+        rootNCallsHeur(0),
+        rootNCallsMwis1(0),
+        rootNCallsMwis2(0),
+        rootNCallsExact(0),
+        rootTimePool(0.0),
+        rootTimeHeur(0.0),
+        rootTimeMwis1(0.0),
+        rootTimeMwis2(0.0),
+        rootTimeExact(0.0),
+        otherNodesHeurTime(0.0),
+        otherNodesFeasNCalls(0),
+        otherNodesFeasTime(0.0),
+        otherNodesNColsPool(0),
+        otherNodesNColsHeur(0),
+        otherNodesNColsMwis1(0),
+        otherNodesNColsMwis2(0),
+        otherNodesNColsExact(0),
+        otherNodesNCallsPool(0),
+        otherNodesNCallsHeur(0),
+        otherNodesNCallsMwis1(0),
+        otherNodesNCallsMwis2(0),
+        otherNodesNCallsExact(0),
+        otherNodesTimePool(0.0),
+        otherNodesTimeHeur(0.0),
+        otherNodesTimeMwis1(0.0),
+        otherNodesTimeMwis2(0.0),
+        otherNodesTimeExact(0.0) {}
 
   virtual std::string get_state_as_str();
-  virtual void write_stats(std::ostream &file);
-  virtual void print_stats(std::ostream &file);
+  virtual void write_stats(std::ostream& file);
+  virtual void print_stats(std::ostream& file);
   virtual ~Stats() = default;
 };
 
 class HeurStats : public Stats {
-public:
+ public:
   // Best objective value
   double value;
   // Total time
@@ -160,12 +203,16 @@ public:
   size_t bestIter;
 
   HeurStats()
-      : Stats(), value(-1.0), totalTime(0.0), totalIters(0), bestTime(-1.0),
+      : Stats(),
+        value(-1.0),
+        totalTime(0.0),
+        totalIters(0),
+        bestTime(-1.0),
         bestIter(-1) {}
 
   std::string get_state_as_str() override;
-  void write_stats(std::ostream &file) override;
-  void print_stats(std::ostream &file) override;
+  void write_stats(std::ostream& file) override;
+  void print_stats(std::ostream& file) override;
 };
 
-#endif // __STATS_HPP__
+#endif  // __STATS_HPP__

@@ -10,28 +10,27 @@ void ThresholdCallback::check_threshold(
   if (context.isCandidatePoint())
     if (context.getCandidateObjective() > THRESHOLD) {
       // Save stable set
-      IloNumArray valY(context.getEnv(), num_vertices(in.graph));
+      IloNumArray valY(context.getEnv(), num_vertices(dpcp.get_graph()));
       context.getCandidatePoint(y, valY);
-      IloNumArray valWb(context.getEnv(), in.nB);
+      IloNumArray valWb(context.getEnv(), dpcp.get_nQ());
       context.getCandidatePoint(w, valWb);
-      for (size_t iB = 0; iB < in.nB; ++iB) {
-        if (valWb[iB] < 0.5)
+      for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj) {
+        if (valWb[qj] < 0.5)
           continue;
-        TypeB b = in.idB2TyB[iB];
-        // Postprocessing: force w_b \leq \sum_{v \in B^b} y_v
+        // Postprocessing: force w_j <= \sum_{v in Q[j]} y_v
         size_t sum_y = 0;
-        for (auto v : in.Vb[b])
-          if (valY[in.getId[v]] > 0.5)
+        for (auto v : dpcp.get_Q_parts()[qj])
+          if (valY[dpcp.get_current_id(v)] > 0.5)
             sum_y += 1;
         if (sum_y == 0)
-          valWb[iB] = 0.0;
+          valWb[qj] = 0.0;
         else
-          stab.bs.insert(in.idB2TyB[iB]);
+          stab.qs.insert(qj);
       }
-      for (auto v : boost::make_iterator_range(vertices(in.graph)))
-        if (valY[in.getId[v]] > 0.5) {
+      for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
+        if (valY[dpcp.get_current_id(v)] > 0.5) {
           stab.stable.push_back(v);
-          stab.as.insert(in.graph[v].first);
+          stab.ps.insert(dpcp.get_P_part(v));
         }
       stab.cost = context.getCandidateObjective();
       // Abort execution
@@ -49,10 +48,10 @@ void ThresholdCallback::invoke(const IloCplex::Callback::Context &context) {
     check_threshold(context);
 }
 
-PricingEnv::PricingEnv(GraphEnv &in, double exactTimeLimit)
-    : in(in), stab(), exactTimeLimit(exactTimeLimit), cxenv(), cxmodel(cxenv),
-      y(cxenv, num_vertices(in.graph)), w(cxenv, in.nB), cxcons(cxenv),
-      cplex(cxenv), cb(in, stab, y, w), contextMask(0), mwis_env(NULL),
+PricingEnv::PricingEnv(DPCPInst &dpcpRef, double exactTimeLimit)
+    : dpcp(dpcpRef), stab(), exactTimeLimit(exactTimeLimit), cxenv(), cxmodel(cxenv),
+      y(cxenv, num_vertices(dpcp.get_graph())), w(cxenv, dpcp.get_nQ()), cxcons(cxenv),
+      cplex(cxenv), cb(dpcpRef, stab, y, w), contextMask(0), mwis_env(NULL),
       mwis_pi(NULL), ecount(0), elist(NULL) {
   exact_init();
   mwis_init();
@@ -77,70 +76,69 @@ PricingEnv::~PricingEnv() {
 void PricingEnv::exact_init() {
 
   // Variables
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
     char name[100];
-    snprintf(name, sizeof(name), "y_%ld_%ld", in.graph[v].first,
-             in.graph[v].second);
-    y[in.getId[v]] = IloBoolVar(cxenv, name);
+    snprintf(name, sizeof(name), "y_%ld_%ld", dpcp.get_P_part(v),
+             dpcp.get_Q_part(v));
+    y[dpcp.get_current_id(v)] = IloBoolVar(cxenv, name);
   }
-  for (size_t iB = 0; iB < in.nB; ++iB) {
+  for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj) {
     char name[100];
-    snprintf(name, sizeof(name), "w_%ld", iB);
-    w[iB] = IloBoolVar(cxenv, name);
+    snprintf(name, sizeof(name), "w_%ld", qj);
+    w[qj] = IloBoolVar(cxenv, name);
   }
 
   // Objective
   IloExpr obj(cxenv);
-  for (auto v : boost::make_iterator_range(vertices(in.graph)))
-    obj += y[in.getId[v]] * 1.0;
-  for (size_t iB = 0; iB < in.nB; ++iB)
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
+    obj += y[dpcp.get_current_id(v)] * 1.0;
+  for (size_t iB = 0; iB < dpcp.get_nQ(); ++iB)
     obj += w[iB] * (-1.0);
   cxobj = IloMaximize(cxenv, obj);
   cxmodel.add(cxobj);
   obj.end();
 
   // Constraints
-  // (1) \sum_{b \in B: (a,b) \in V} y_a_b <= 1, for all a \in A
-  for (size_t ia = 0; ia < in.nA; ++ia) {
+  // (1) \sum_{j in Q: (i,j) in V} y_{i,j} <= 1, for all i in P
+  for (size_t idP = 0; idP < dpcp.get_nP(); ++idP) {
     IloExpr restr(cxenv);
-    for (Vertex v : in.snd[ia])
-      restr += y[in.getId[v]];
+    for (Vertex v : dpcp.get_snd_parts()[idP])
+      restr += y[dpcp.get_current_id(v)];
     cxcons.add(restr <= 1);
     restr.end();
   }
 
-  // (2) y_a_b + y_a'_b <= w_b, for all ((a,b),(a',b)) \in E such that a != a'
-  for (auto e : boost::make_iterator_range(edges(in.graph))) {
-    auto u = source(e, in.graph);
-    auto v = target(e, in.graph);
-    if (in.graph[u].first == in.graph[v].first)
+  // (2) y_{i,j} + y_{i',j} <= w_j, for all ((i,j),(i',j)) in E such that i != i'
+  for (auto e : boost::make_iterator_range(edges(dpcp.get_graph()))) {
+    auto u = source(e, dpcp.get_graph());
+    auto v = target(e, dpcp.get_graph());
+    if (dpcp.get_P_part(u) == dpcp.get_P_part(v))
       continue;
-    if (in.graph[u].second != in.graph[v].second)
+    if (dpcp.get_Q_part(u) != dpcp.get_Q_part(v))
       continue;
     IloExpr restr(cxenv);
-    restr +=
-        y[in.getId[u]] + y[in.getId[v]] - w[in.tyB2idB[in.graph[u].second]];
+    restr += y[dpcp.get_current_id(u)] + y[dpcp.get_current_id(v)] - w[dpcp.get_Q_part(u)];
     cxcons.add(restr <= 0);
     restr.end();
   }
 
-  // (3) y_a_b + \sum_{b' != b: (a',b') \in N(a,b)} y_a'_b' <= 1, for all
-  // (a,b) \in V, a != a'
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
-    TypeA a = in.graph[v].first;
-    TypeB b = in.graph[v].second;
-    for (size_t a2 = 0; a2 < in.nA; ++a2) {
-      if (a2 == a)
+  // (3) y_{i,j} + \sum_{j' != j: (i',j') in N(i,j)} y_{i',j'} <= 1, for all
+  // (i,j) in V, i != i'
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
+    size_t pi = dpcp.get_P_part(v);
+    size_t qj = dpcp.get_Q_part(v);
+    for (size_t idP2 = 0; idP2 < dpcp.get_nP(); ++idP2) {
+      if (idP2 == pi)
         continue;
       std::list<Vertex> neighbors;
-      for (auto v2 : in.snd[a2])
-        if (in.graph[v2].second != b && edge(v, v2, in.graph).second)
+      for (auto v2 : dpcp.get_snd_parts()[idP2])
+        if (dpcp.get_Q_part(v2) != qj && edge(v, v2, dpcp.get_graph()).second)
           neighbors.push_back(v2);
       if (!neighbors.empty()) {
         IloExpr restr(cxenv);
-        restr += y[in.getId[v]];
+        restr += y[dpcp.get_current_id(v)];
         for (auto v2 : neighbors) {
-          restr += y[in.getId[v2]];
+          restr += y[dpcp.get_current_id(v2)];
         }
         cxcons.add(restr <= 1);
         restr.end();
@@ -148,10 +146,10 @@ void PricingEnv::exact_init() {
     }
   }
 
-  // (4) y_a_b <= w_b, for all (a,b) \in V
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
+  // (4) y_{i,j} <= w_j, for all (i,j) in V
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
     IloExpr restr(cxenv);
-    restr += y[in.getId[v]] - w[in.tyB2idB[in.graph[v].second]];
+    restr += y[dpcp.get_current_id(v)] - w[dpcp.get_Q_part(v)];
     cxcons.add(restr <= 0);
     restr.end();
   }
@@ -183,13 +181,13 @@ void PricingEnv::mwis_init() {
   COLORstable_initenv(&mwis_env, NULL, 0);
 
   // Intialize vectors of weights
-  mwis_pi = (COLORNWT *)COLOR_SAFE_MALLOC(num_vertices(in.graph), COLORNWT);
+  mwis_pi = (COLORNWT *)COLOR_SAFE_MALLOC(num_vertices(dpcp.get_graph()), COLORNWT);
 
   // Initialize edge array
-  elist = (int *)malloc(sizeof(int) * 2 * num_edges(in.graph));
-  for (auto e : boost::make_iterator_range(edges(in.graph))) {
-    elist[2 * ecount] = in.getId[source(e, in.graph)];
-    elist[2 * ecount++ + 1] = in.getId[target(e, in.graph)];
+  elist = (int *)malloc(sizeof(int) * 2 * num_edges(dpcp.get_graph()));
+  for (auto e : boost::make_iterator_range(edges(dpcp.get_graph()))) {
+    elist[2 * ecount] = dpcp.get_current_id(source(e, dpcp.get_graph()));
+    elist[2 * ecount++ + 1] = dpcp.get_current_id(target(e, dpcp.get_graph()));
   }
 }
 
@@ -221,7 +219,7 @@ int double2COLORNWT(COLORNWT nweights[], COLORNWT *scalef,
 }
 
 std::list<std::pair<StableEnv, PRICING_STATE>>
-PricingEnv::mwis_P_Q_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+PricingEnv::mwis_P_Q_solve(IloNumArray &dualsP, IloNumArray &dualsQ) {
 
   // Initialize local variables
   COLORset *newsets = NULL;
@@ -234,17 +232,18 @@ PricingEnv::mwis_P_Q_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   // Subgraph induced by vertices with positive weight
 
   // vertex mapping for graph to subgraph
-  std::vector<int> vmap(num_vertices(in.graph), -1);
+  std::vector<int> vmap(num_vertices(dpcp.get_graph()), -1);
   // vertex mapping from subgraph to graph
   std::vector<int> invmap;
   std::vector<double> weights2;
   size_t i = 0;
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
-    auto [a, b, id] = in.graph[v];
-    double w = dualsA[in.tyA2idA[a]] - dualsB[in.tyB2idB[b]];
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
+    size_t pi = dpcp.get_P_part(v);
+    size_t qj = dpcp.get_Q_part(v);
+    double w = dualsP[pi] - dualsQ[qj];
     if (w > PRICING_EPSILON) {
-      vmap[in.getId[v]] = i;
-      invmap.push_back(in.getId[v]);
+      vmap[dpcp.get_current_id(v)] = i;
+      invmap.push_back(dpcp.get_current_id(v));
       weights2.push_back(w);
       ++i;
     }
@@ -253,14 +252,14 @@ PricingEnv::mwis_P_Q_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   // Recompute edge list according to the previous indices
   // Ignore edges that have as endpoint a vertex with a negative weight
   int ecount2 = 0;
-  int *elist2 = (int *)malloc(sizeof(int) * 2 * num_edges(in.graph));
-  for (auto e : boost::make_iterator_range(edges(in.graph))) {
-    auto v = source(e, in.graph);
-    auto u = target(e, in.graph);
-    if (vmap[in.getId[v]] == -1 || vmap[in.getId[u]] == -1)
+  int *elist2 = (int *)malloc(sizeof(int) * 2 * num_edges(dpcp.get_graph()));
+  for (auto e : boost::make_iterator_range(edges(dpcp.get_graph()))) {
+    auto v = source(e, dpcp.get_graph());
+    auto u = target(e, dpcp.get_graph());
+    if (vmap[dpcp.get_current_id(v)] == -1 || vmap[dpcp.get_current_id(u)] == -1)
       continue;
-    elist2[2 * ecount2] = vmap[in.getId[v]];
-    elist2[2 * ecount2++ + 1] = vmap[in.getId[u]];
+    elist2[2 * ecount2] = vmap[dpcp.get_current_id(v)];
+    elist2[2 * ecount2++ + 1] = vmap[dpcp.get_current_id(u)];
   }
 
   // Scale weights
@@ -291,29 +290,30 @@ PricingEnv::mwis_P_Q_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
     StableEnv st;
     for (int j = 0; j < newsets[set_i].count; ++j) {
       int v = invmap[newsets[set_i].members[j]];
-      Vertex vv = vertex(v, in.graph);
+      Vertex vv = vertex(v, dpcp.get_graph());
       st.stable.push_back(vv);
-      auto [a, b, id] = in.graph[vv];
-      if (st.as.insert(a).second)
-        st.cost += dualsA[in.tyA2idA[a]];
-      if (st.bs.insert(b).second)
-        st.cost -= dualsB[in.tyB2idB[b]];
+      size_t pi = dpcp.get_P_part(vv);
+      size_t qj = dpcp.get_Q_part(vv);
+      if (st.ps.insert(pi).second)
+        st.cost += dualsP[pi];
+      if (st.qs.insert(qj).second)
+        st.cost -= dualsQ[qj];
     }
 
     // Maximalize stable set
-    for (TypeB b : st.bs)
-      for (Vertex v : in.Vb[b]) {
+    for (size_t qj : st.qs)
+      for (Vertex v : dpcp.get_Q_parts()[qj]) {
         // Check adjacencies
         bool ok = true;
         for (Vertex u : st.stable)
-          if (u == v || edge(u, v, in.graph).second)
+          if (u == v || edge(u, v, dpcp.get_graph()).second)
             ok = false;
         if (!ok)
           continue;
-        TypeA a = in.graph[v].first;
-        if (st.as.insert(a).second) {
+        size_t pi = dpcp.get_P_part(v);
+        if (st.ps.insert(pi).second) {
           st.stable.push_back(v);
-          st.cost += dualsA[in.tyA2idA[a]];
+          st.cost += dualsP[pi];
         }
       }
 
@@ -339,7 +339,7 @@ PricingEnv::mwis_P_Q_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 }
 
 std::pair<StableEnv, PRICING_STATE>
-PricingEnv::mwis_P_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+PricingEnv::mwis_P_solve(IloNumArray &dualsP, IloNumArray &dualsQ) {
 
   // Initialize local variables
   COLORset *newsets = NULL;
@@ -348,19 +348,19 @@ PricingEnv::mwis_P_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 
   // Reset stable
   stab.stable.clear();
-  stab.as.clear();
-  stab.bs.clear();
+  stab.ps.clear();
+  stab.qs.clear();
   stab.cost = 0.0;
 
   // Compute vertex weight array
-  std::vector<double> weights(num_vertices(in.graph));
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
-    double w = dualsA[in.tyA2idA[in.graph[v].first]];
+  std::vector<double> weights(num_vertices(dpcp.get_graph()));
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
+    double w = dualsP[dpcp.get_P_part(v)];
     assert(w >= -PRICING_EPSILON);
     if (w < PRICING_EPSILON)
-      weights[in.getId[v]] = 0.0;
+      weights[dpcp.get_current_id(v)] = 0.0;
     else
-      weights[in.getId[v]] = w;
+      weights[dpcp.get_current_id(v)] = w;
   }
 
   // Scale weights
@@ -377,7 +377,7 @@ PricingEnv::mwis_P_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   }
 
   // Solve the MWIS problem up to optimality
-  COLORstable_wrapper(&mwis_env, &newsets, &nnewsets, num_vertices(in.graph),
+  COLORstable_wrapper(&mwis_env, &newsets, &nnewsets, num_vertices(dpcp.get_graph()),
                       ecount, elist, mwis_pi, mwis_pi_scalef, 0, 0, 2);
 
   assert(nnewsets > 0);
@@ -388,13 +388,14 @@ PricingEnv::mwis_P_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   for (int j = 0; j < newsets[0].count; ++j) {
     int v = newsets[0].members[j];
     w += weights[v];
-    Vertex vv = vertex(v, in.graph);
+    Vertex vv = vertex(v, dpcp.get_graph());
     stab.stable.push_back(vv);
-    auto [a, b, id] = in.graph[vv];
-    if (stab.as.insert(a).second)
-      stab.cost += dualsA[in.tyA2idA[a]];
-    if (stab.bs.insert(b).second)
-      stab.cost -= dualsB[in.tyB2idB[b]];
+    size_t pi = dpcp.get_P_part(vv);
+    size_t qj = dpcp.get_Q_part(vv);
+    if (stab.ps.insert(pi).second)
+      stab.cost += dualsP[pi];
+    if (stab.qs.insert(qj).second)
+      stab.cost -= dualsQ[qj];
   }
 
   // Free memory
@@ -415,23 +416,23 @@ PricingEnv::mwis_P_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 }
 
 std::pair<StableEnv, PRICING_STATE>
-PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
+PricingEnv::exact_solve(IloNumArray &dualsP, IloNumArray &dualsQ) {
 
   // Update objective coefficients
-  IloNumArray y_coefs(cxenv, num_vertices(in.graph));
-  for (auto v : boost::make_iterator_range(vertices(in.graph)))
-    y_coefs[in.getId[v]] = dualsA[in.tyA2idA[in.graph[v].first]];
-  IloNumArray w_coefs(cxenv, in.nB);
-  for (size_t iB = 0; iB < in.nB; ++iB)
-    w_coefs[iB] = -dualsB[iB];
+  IloNumArray y_coefs(cxenv, num_vertices(dpcp.get_graph()));
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
+    y_coefs[dpcp.get_current_id(v)] = dualsP[dpcp.get_P_part(v)];
+  IloNumArray w_coefs(cxenv, dpcp.get_nQ());
+  for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj)
+    w_coefs[qj] = -dualsQ[qj];
   cxobj.setLinearCoefs(y, y_coefs);
   cxobj.setLinearCoefs(w, w_coefs);
   cxmodel.add(cxobj);
 
   // Reset stable
   stab.stable.clear();
-  stab.as.clear();
-  stab.bs.clear();
+  stab.ps.clear();
+  stab.qs.clear();
   stab.cost = 0.0;
 
   // Solve
@@ -446,28 +447,27 @@ PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
   case IloCplex::CplexStatus::Optimal: {
     // The optimal value is <= THRESHOLD = 1.1
     // Recover optimal solution
-    IloNumArray valY(cxenv, num_vertices(in.graph));
+    IloNumArray valY(cxenv, num_vertices(dpcp.get_graph()));
     cplex.getValues(y, valY);
-    IloNumArray valW(cxenv, in.nB);
+    IloNumArray valW(cxenv, dpcp.get_nQ());
     cplex.getValues(w, valW);
-    for (size_t iB = 0; iB < in.nB; ++iB) {
-      if (valW[iB] < 0.5)
+    for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj) {
+      if (valW[qj] < 0.5)
         continue;
-      TypeB b = in.idB2TyB[iB];
-      // Postprocessing: force w_b \leq \sum_{v \in B^b} y_v
+      // Postprocessing: force w_j <= \sum_{v in Q[j]} y_v
       size_t sum_y = 0;
-      for (auto v : in.Vb[b])
-        if (valY[in.getId[v]] > 0.5)
+      for (auto v : dpcp.get_Q_parts()[qj])
+        if (valY[dpcp.get_current_id(v)] > 0.5)
           sum_y += 1;
       if (sum_y == 0)
-        valW[iB] = 0.0;
+        valW[qj] = 0.0;
       else
-        stab.bs.insert(in.idB2TyB[iB]);
+        stab.qs.insert(qj);
     }
-    for (auto v : boost::make_iterator_range(vertices(in.graph)))
-      if (valY[in.getId[v]] > 0.5) {
+    for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
+      if (valY[dpcp.get_current_id(v)] > 0.5) {
         stab.stable.push_back(v);
-        stab.as.insert(in.graph[v].first);
+        stab.ps.insert(dpcp.get_P_part(v));
       }
     stab.cost = cplex.getBestObjValue();
     // Classify optimal solution
@@ -480,20 +480,21 @@ PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
     // Exit with abortion means that the current value is > THRESHOLD = 1.1
     state = PRICING_STABLE_FOUND;
     // Try to maximalize the stable set
-    for (Vertex v : boost::make_iterator_range(vertices(in.graph))) {
-      auto [a, b, id] = in.graph[v];
-      if (dualsA[in.tyA2idA[a]] < PRICING_EPSILON || stab.as.contains(a))
+    for (Vertex v : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
+      size_t pi = dpcp.get_P_part(v);
+      size_t qj = dpcp.get_Q_part(v);
+      if (dualsP[pi] < PRICING_EPSILON || stab.ps.contains(pi))
         continue;
-      if (!stab.bs.contains(b))
+      if (!stab.qs.contains(qj))
         continue;
       auto it = std::find_if(
           stab.stable.begin(), stab.stable.end(),
-          [v, this](auto w) { return edge(v, w, in.graph).second; });
+          [v, this](auto w) { return edge(v, w, dpcp.get_graph()).second; });
       if (it != stab.stable.end())
         continue;
       stab.stable.push_back(v);
-      stab.as.insert(a);
-      stab.cost += dualsA[in.tyA2idA[a]];
+      stab.ps.insert(pi);
+      stab.cost += dualsP[pi];
     }
     break;
   case IloCplex::CplexStatus::AbortTimeLim:
@@ -512,23 +513,24 @@ PricingEnv::exact_solve(IloNumArray &dualsA, IloNumArray &dualsB) {
 }
 
 std::pair<StableEnv, PRICING_STATE>
-PricingEnv::heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, double alpha) {
+PricingEnv::heur_solve(IloNumArray &dualsP, IloNumArray &dualsQ, double alpha) {
 
   // Reset stable
   stab.stable.clear();
-  stab.as.clear();
-  stab.bs.clear();
+  stab.ps.clear();
+  stab.qs.clear();
   stab.cost = 0.0;
 
   // Candidates
   std::list<std::pair<double, Vertex>> candidates;
   double max_cost = std::numeric_limits<double>::lowest();
   double min_cost = std::numeric_limits<double>::max();
-  for (auto v : boost::make_iterator_range(vertices(in.graph))) {
-    auto [a, b, id] = in.graph[v];
-    double cost_a = dualsA[in.tyA2idA[a]];
-    double cost_b = dualsB[in.tyB2idB[b]];
-    double cost = cost_a - cost_b;
+  for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
+    size_t pi = dpcp.get_P_part(v);
+    size_t qj = dpcp.get_Q_part(v);
+    double cost_p = dualsP[pi];
+    double cost_q = dualsQ[qj];
+    double cost = cost_p - cost_q;
     candidates.push_back(std::make_pair(cost, v));
     if (cost > max_cost)
       max_cost = cost;
@@ -549,12 +551,13 @@ PricingEnv::heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, double alpha) {
     auto it_v = rcl.begin();
     std::advance(it_v, random_index);
     Vertex v = it_v->second;
-    auto [a, b, id] = in.graph[v];
+    size_t pi = dpcp.get_P_part(v);
+    size_t qj = dpcp.get_Q_part(v);
 
     // Add the best candidate to the stable set
     stab.stable.push_back(v);
-    stab.as.insert(a);
-    stab.bs.insert(b);
+    stab.ps.insert(pi);
+    stab.qs.insert(qj);
     stab.cost += it_v->first;
 
     // Remove and update weights in the candidate list
@@ -562,13 +565,14 @@ PricingEnv::heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, double alpha) {
     min_cost = std::numeric_limits<double>::max();
     for (auto it = candidates.begin(); it != candidates.end();) {
       Vertex u = it->second;
-      auto [au, bu, idu] = in.graph[u];
-      if (au == a || edge(u, v, in.graph).second) {
+      size_t pu = dpcp.get_P_part(u);
+      size_t qu = dpcp.get_Q_part(u);
+      if (pu == pi || edge(u, v, dpcp.get_graph()).second) {
         it = candidates.erase(it);
         continue;
       }
-      if (bu == b)
-        it->first = dualsA[in.tyA2idA[au]];
+      if (qu == qj)
+        it->first = dualsP[pu];
       if (it->first > max_cost)
         max_cost = it->first;
       if (it->first < min_cost)
@@ -585,3 +589,4 @@ PricingEnv::heur_solve(IloNumArray &dualsA, IloNumArray &dualsB, double alpha) {
 
   return std::make_pair(stab, state);
 }
+

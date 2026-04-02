@@ -1,52 +1,60 @@
 #include "col.hpp"
 
-Col::Col(){};
+#include <cassert>
+
+Col::Col() {};
 
 void Col::reset_coloring() {
   coloring.clear();
   classes.clear();
-  colorA.clear();
-  colorB.clear();
+  colorP.clear();
+  colorQ.clear();
 }
 
-void Col::set_color(const Graph &graph, const Vertex v, const Color k) {
-  TypeA a = graph[v].first;
-  TypeB b = graph[v].second;
+void Col::set_color(VertexId v, size_t pi, size_t qj, Color k) {
+  assert(!is_colored(v));
   coloring[v] = k;
   classes[k].insert(v);
-  colorA[a] = k;
-  if (colorB.contains(b))
-    // All the vertices of V^b must have the same color
-    assert(colorB[b] == k);
-  else {
-    colorB[b] = k;
-  }
+  colorP[pi] = k;
+  if (colorQ.contains(qj)) {
+    std::cout << "Coloring error #1: Q-part " << qj
+              << " is already colored with " << colorQ[qj] << " but vertex "
+              << v << " is being colored with color " << k << std::endl;
+    assert(colorQ[qj] == k);
+  } else
+    colorQ[qj] = k;
 }
 
-bool Col::check_coloring(const Graph &graph) const {
+void Col::set_color(const DPCPInst& dpcp, VertexId vId, Color k) {
+  Vertex v = vertex(vId, dpcp.get_graph());
+  set_color(vId, dpcp.get_P_part(v), dpcp.get_Q_part(v), k);
+}
 
-  // Return false if some b \in B has more than one color
-  // Already checked by set_color
+bool Col::check_coloring(const DPCPInst& dpcp) const {
+  const Graph& graph = dpcp.get_graph();
 
-  // Return false if some a \in A is uncolored
+  // Return false if some P-part is uncolored
   for (auto v : boost::make_iterator_range(vertices(graph))) {
-    TypeA a = graph[v].first;
-    if (!colorA.contains(a)) {
-      std::cout << "Coloring error #2: " << a << " is uncolored" << std::endl;
+    size_t pi = dpcp.get_P_part(v);
+    if (!colorP.contains(pi)) {
+      std::cout << "Coloring error #2: P-part " << pi << " is uncolored"
+                << std::endl;
       return false;
     }
   }
 
   // Return false if the coloring is not proper
   for (auto e : boost::make_iterator_range(edges(graph))) {
-    auto u = source(e, graph);
-    auto v = target(e, graph);
-    if (coloring.contains(u) && coloring.contains(v) &&
-        coloring.at(u) == coloring.at(v)) {
-      std::cout << "Coloring error #3: " << u << " (" << graph[u].first << ","
-                << graph[u].second << ") and " << v << " (" << graph[v].first
-                << "," << graph[v].second
-                << ") are adjecent and both have color " << coloring.at(u)
+    Vertex u = source(e, graph);
+    size_t idU = dpcp.get_current_id(u);
+    Vertex v = target(e, graph);
+    size_t idV = dpcp.get_current_id(v);
+    if (coloring.contains(idU) && coloring.contains(idV) &&
+        coloring.at(idU) == coloring.at(idV)) {
+      std::cout << "Coloring error #3: " << u << " (" << dpcp.get_P_part(u)
+                << "," << dpcp.get_Q_part(u) << ") and " << v << " ("
+                << dpcp.get_P_part(v) << "," << dpcp.get_Q_part(v)
+                << ") are adjecent and both have color " << coloring.at(idU)
                 << std::endl;
       return false;
     }
@@ -55,45 +63,50 @@ bool Col::check_coloring(const Graph &graph) const {
   return true;
 }
 
-StableEnv Col::get_stable(const Graph &graph, const Color k) const {
+StableEnv Col::get_stable(const DPCPInst& dpcp, Color k) const {
   StableEnv stab;
   stab.stable.reserve(classes.at(k).size());
-  for (Vertex v : classes.at(k)) {
+  for (VertexId idV : classes.at(k)) {
+    Vertex v = vertex(idV, dpcp.get_graph());
     stab.stable.push_back(v);
-    stab.as.insert(graph[v].first);
-    stab.bs.insert(graph[v].second);
+    stab.ps.insert(dpcp.get_P_part(v));
+    stab.qs.insert(dpcp.get_Q_part(v));
   }
   return stab;
 }
 
-void Col::translate_coloring(const Graph &srcGraph, const Graph &dstGraph,
-                             Col &dstCol) {
-  for (auto &[v, k] : coloring) {
-    size_t id = srcGraph[v].id;
-    // Find original vertex
-    auto u = vertex(id, dstGraph);
-    dstCol.set_color(dstGraph, u, k);
+Col Col::translate_coloring(const DPCPInst& currentDpcp,
+                            const DPCPInst& originalDPCP) const {
+  Col dstCol;
+  for (auto& [idv, k] : coloring) {
+    Vertex v = vertex(idv, currentDpcp.get_graph());
+    size_t originalId = currentDpcp.get_original_id(v);
+    dstCol.set_color(originalDPCP, originalId, k);
   }
+  return dstCol;
 }
 
-void Col::color_isolated_vertices(std::list<VertexInfo> &isolated, Col &dstCol,
-                                  const Graph &dstGraph) {
-  for (auto [a, b, id] : isolated) {
-    // Find original vertex
-    auto v = vertex(id, dstGraph);
+void Col::color_isolated_vertices(
+    const DPCPInst& dpcp,
+    const std::list<IsolatedVertex>& isolatedVertices) {
+  for (const auto& iso : isolatedVertices) {
+    VertexId id = iso.id;
+    Vertex v = vertex(id, dpcp.get_graph());
+    size_t pi = dpcp.get_P_part(v);
+    size_t qj = dpcp.get_Q_part(v);
     // Decide color
     Color k;
-    if (dstCol.is_colored_B(b))
-      k = dstCol.get_color_B(b);
+    if (is_colored_Q(qj))
+      k = get_color_Q(qj);
     else
-      k = 0; // First color;
-    dstCol.set_color(dstGraph, v, k);
+      k = 0;  // First color;
+    set_color(id, pi, qj, k);
   }
 }
 
-void Col::write_coloring(const Graph &graph, std::ostream &out) const {
+void Col::write_coloring(std::ostream& out) const {
   out << coloring.size() << " " << classes.size() << "\n";
-  for (auto [v, k] : coloring) {
-    out << graph[v].id << " " << k << "\n";
+  for (auto [idv, k] : coloring) {
+    out << idv << " " << k << "\n";
   }
 }

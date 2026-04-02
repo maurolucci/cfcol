@@ -16,124 +16,98 @@ extern "C" {
 #include <chrono>
 #include <iostream>
 
-#define EPSILON 0.00001 // 10e-5
+#define EPSILON 0.00001  // 10e-5
 
-using Column = VertexVector;
+using Column = StableEnv;
+using Pool = std::vector<Column>;
 
 class LP {
-
-public:
-  LP(Graph *graph, Params &params, Pool &pool, Graph &origGraph,
-     std::ostream &log, bool isRoot = false);
+ public:
+  LP(DPCPInst dpcp, Pool pool, const DPCPInst& origDpcp, Params& params,
+     Stats& stats, std::ostream& log, bool isRoot = false);
   ~LP();
 
   // Optimize the linear relaxation by column generation
-  [[nodiscard]] LP_STATE optimize(double timelimit, double ub, Stats &stats);
+  [[nodiscard]] LP_STATE solve(double timelimit, double ub);
 
-  // Get objective value (after calling optimize)
-  [[nodiscard]] double get_obj_value() const { return objVal; };
-
-  // Tell whether a feasible solution was found (after calling optimize)
-  // Either found by the heuristic or the feasibility check
-  [[nodiscard]] bool has_feas_sol() const {
-    return initSol.get_n_colors() > 0;
+  // Getters
+  [[nodiscard]] double get_lower_bound() const { return objVal; };
+  [[nodiscard]] size_t get_upper_bound() const {
+    return coloring.get_n_colors();
   };
-
-  // Get the cost of the feasible solution (after calling optimize)
-  [[nodiscard]] size_t get_feas_value() const {
-    return initSol.get_n_colors();
+  [[nodiscard]] bool has_heur_solution() const {
+    return coloring.get_n_colors() > 0;
   };
+  Col get_heur_solution();
+  Col get_lp_solution();
 
-  // Save the optimal solution (after calling optimize)
-  void save_lp_solution(Stats &stats, Col &col);
+  // Branch
+  std::vector<LP> branch();
 
-  // Save the heuristic solution (after calling optimize)
-  void save_heur_solution(Stats &stats, Col &col);
+ private:
+  DPCPInst dpcp;  // DPCP instance at the current node
+  Pool pool;      // Pool of stable sets at the current node (herited from the
+                  // parent)
+  DPCPInst& origDpcp;  // Reference to the original DPCP instance
+  Params& params;      // Reference to the parameters of the algorithm
+  Stats& stats;  // Reference to the stats object to update during the algorithm
+  std::ostream& log;  // Reference to the log stream
 
-  // Branch (after calling optimize)
-  void branch(std::vector<LP *> &branches);
+  bool isRoot;                // Is the current node the root node?
+  double objVal;              // Objective value of the current LP
+  LP_STATE state;             // State of the current LP
+  bool initializedWithDummy;  // Was the current LP initialized with a dummy
+                              // column?
 
-private:
-  // Input data
-  GraphEnv in;
-  // Parameters
-  Params &params;
-  // Vector of columns (stable sets)
-  std::vector<Column> stables;
-  // Vector of positive variables
-  std::vector<int> posVars;
-  // Branching variable
-  Vertex branchVar;
-  // Objective value
-  double objVal;
-  // Initial solution
-  Col initSol;
-  // Pool of columns
-  Pool &pool;
-  // Original graph
-  Graph &origGraph;
-  // Whether a dummy column was used to initialize the LP
-  bool initializedWithDummy;
-  // Log file
-  std::ostream &log;
-  // Is root the node?
-  bool isRoot;
-  // LP state
-  LP_STATE state;
+  std::vector<Column>
+      stables;  // Stable sets corresponding to the columns in the current LP
+  std::vector<size_t> posVars;  // Indices of columns whose variables have
+                                // positive value in the current LP solution
+  Vertex branchingVertex;  // Vertex selected for branching at the current node
 
-  // // Map from current vertices to original vertices
-  // std::vector<Vertex> vertexMap;
-  // // Map from original vertices to current vertices
-  // std::vector<int> invVertexMap;
-
-  // Heuristic solution of the DPCP instances at the current node
-  void heuristic(HeurStats &stats, Params &params);
-
-  // Check the feasibility of the DPCP instance at the current node
-  void feasibility_check(Stats &stats, Params &params);
-
-  // Initialize the linear relaxation with an initial set of columns
-  void add_constraints_and_objective(CplexEnv &cenv);
-  void add_initial_columns(CplexEnv &cenv);
-
-  // Add a new column to the linear relaxation
-  void add_column(CplexEnv &cenv, StableEnv &stab, bool addStable);
-
-  // Check column validity
-  bool check_column(StableEnv &stab);
-
-  // Print column
-  void print_column(StableEnv &stab);
-
-  // Translate a stable set from the pool in terms of the vertices of the
-  // current graph
-  std::pair<bool, StableEnv> translate_stable_from_pool(StableEnv &stab,
-                                                        IloNumArray &dualsA,
-                                                        IloNumArray &dualsB);
-
-  // Set CPLEX's parameters
-  void set_parameters(CplexEnv &cenv, IloCplex &cplex);
-
-  // Solve pricing problem
-  int pricing(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-              IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
-  int pricing_pool(CplexEnv &cenv, Stats &stats, IloNumArray &dualsA,
-                   IloNumArray &dualsB, bool isRoot);
-  int pricing_greedy(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                     IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
-  int pricing_P_Q_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                       IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
-  int pricing_P_mwss(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                     IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
-  int pricing_exact(CplexEnv &cenv, PricingEnv &penv, Stats &stats,
-                    IloNumArray &dualsA, IloNumArray &dualsB, bool isRoot);
+  Col coloring;  // Feasible coloring for the current node
 
   // Exact solve of a GCP instance
-  LP_STATE solve_GCP(Stats &stats, double timelimit, double ub);
+  LP_STATE gcp_solve(double timelimit, double ub);
+
+  // Heuristic solution of the DPCP instances at the current node
+  void heuristic_solve();
+
+  // Feasibility check of the DPCP instance at the current node
+  bool feasibility_solve();
+
+  // Set CPLEX's parameters
+  void set_parameters(CplexEnv& cenv, IloCplex& cplex);
+
+  // Initialize LP
+  void add_constraints_and_objective(CplexEnv& cenv);
+  void add_initial_columns(CplexEnv& cenv);
+
+  // Pricing methods
+  int pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
+              IloNumArray& dualsQ);
+  int pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ);
+  int pricing_greedy(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
+                     IloNumArray& dualsQ, bool enabled);
+  int pricing_P_Q_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
+                       IloNumArray& dualsQ, bool enabled);
+  int pricing_P_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
+                     IloNumArray& dualsQ, bool enabled);
+  int pricing_exact(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
+                    IloNumArray& dualsQ);
+
+  // Add a new column to the linear relaxation
+  void add_column(CplexEnv& cenv, Column& stab);
+
+  // Check column validity
+  bool check_column(Column& stab);
+
+  // Print column
+  void print_column(Column& stab);
 
   // Get branching variable
-  Vertex get_branching_variable(const IloNumArray &values);
-  Vertex get_branching_variable_FMS(const IloNumArray &values);
+  Vertex get_branching_variable_LNTT(const IloNumArray& values);
+  Vertex get_branching_variable_FMS(const IloNumArray& values);
 };
 
-#endif // _LP_HPP_
+#endif  // _LP_HPP_

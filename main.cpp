@@ -1,3 +1,8 @@
+#include <boost/program_options.hpp>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+
 #include "bp.hpp"
 #include "col.hpp"
 #include "compact_ilp.hpp"
@@ -8,41 +13,45 @@
 #include "params.hpp"
 #include "stats.hpp"
 
-#include <boost/program_options.hpp>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-
 namespace po = boost::program_options;
 namespace fs = std::filesystem;
 
 // Output directories, initially empty
 std::map<std::string, fs::path> outDirs = {
-    {"log", fs::path()},  // Directory for log file
-    {"stat", fs::path()}, // Directory for stats file
-    {"sol", fs::path()},  // Directory for solution file
-    {"col", fs::path()},  // Directory for column generation log file
-    {"iter", fs::path()}  // Directory for iteration log file for semigreedy
+    {"log", fs::path()},   // Directory for log file
+    {"stat", fs::path()},  // Directory for stats file
+    {"sol", fs::path()},   // Directory for solution file
+    {"col", fs::path()},   // Directory for column generation log file
+    {"iter", fs::path()}   // Directory for iteration log file for semigreedy
 };
 
 // Output class to handle std::ostream and file streams
 class Output {
-public:
+ public:
   std::ofstream logFileAux, colFileAux, iterFileAux;
-  std::ostream &logFile, &colFile, &iterFile;
-  Output(std::ostream &logStream = std::cout,
-         std::ostream &colStream = std::cout,
-         std::ostream &iterStream = std::cout)
-      : logFileAux(), colFileAux(), logFile(logStream), colFile(colStream),
+  std::ostream& logFile;
+  std::ostream& colFile;
+  std::ostream& iterFile;
+
+  Output(std::ostream& logStream = std::cout,
+         std::ostream& colStream = std::cout,
+         std::ostream& iterStream = std::cout)
+      : logFileAux(),
+        colFileAux(),
+        logFile(logStream),
+        colFile(colStream),
         iterFile(iterStream) {}
+
   Output(std::string logPath, std::string colPath, std::string iterPath)
       : logFileAux(logPath, std::ofstream::app),
-        colFileAux(colPath, std::ofstream::app), logFile(this->logFileAux),
-        colFile(this->colFileAux), iterFile(this->iterFileAux) {}
+        colFileAux(colPath, std::ofstream::app),
+        iterFileAux(iterPath, std::ofstream::app),
+        logFile(this->logFileAux),
+        colFile(this->colFileAux),
+        iterFile(this->iterFileAux) {}
 };
 
-int main(int argc, const char **argv) {
-
+int main(int argc, const char** argv) {
   // Parse arguments
   po::options_description desc(argv[0]);
   desc.add_options()("help,h", "show this help");
@@ -72,7 +81,7 @@ int main(int argc, const char **argv) {
                      "type of heuristic for other nodes (0: no heuristic, 1: "
                      "greedy 1-step, 2: greedy 2-step, 3: semi-greedy 2-step)");
   desc.add_options()(
-      "heur-2step-variant", po::value<size_t>()->default_value(3),
+      "heur-2step-variant", po::value<size_t>()->default_value(4),
       "variant of the 2-step heuristic (2: DEG, 3: EDG, 4: AUTO)");
   desc.add_options()("heur-semigreedy-alpha",
                      po::value<double>()->default_value(0.2),
@@ -93,23 +102,18 @@ int main(int argc, const char **argv) {
       "feas-nodes-time", po::value<int>()->default_value(60),
       "time limit for feasibility check (in seconds). Only for ILP");
   desc.add_options()(
-      "inherit-cols", po::value<int>()->default_value(1),
+      "inherit-cols", po::value<int>()->default_value(2),
       "type of column inheritance from parent (0: no inheritance, 1: inherit "
-      "all columns, 2: inherit only basic columns)");
+      "all columns, 2: inherit only positive columns)");
   desc.add_options()("dummy-weight", po::value<double>()->default_value(1000.0),
                      "weight of dummy column during initialization");
   desc.add_options()("preproc-off", "do not preprocess the input graph");
   desc.add_options()("pool", "use a pool of columns (currently unimplemented)");
-  desc.add_options()("pricing-greedy-off",
-                     "do not use greedy heuristic for pricing");
-  desc.add_options()("pricing-pq-mwsp-off",
-                     "do not use P,Q-MWSSP heuristic for pricing");
-  desc.add_options()("pricing-p-mwsp-off",
-                     "do not use P-MWSSP heuristic for pricing");
   desc.add_options()(
-      "pricing-order", po::value<int>()->default_value(1),
-      "order of pricing (1: pool -> greedy -> P,Q-MWSSP -> P-MWSSP "
-      "II, 2: pool -> greedy -> P-MWSSP II -> P,Q-MWSSP)");
+      "pricing-method", po::value<int>()->default_value(6),
+      "pricing method (0: ILP, 1: greedy + ILP, 2: greedy + P,Q-MWSSP + ILP, "
+      "3: greedy + P-MWSSP + ILP, 4: greedy + P,Q-MWSSP + P-MWSSP + ILP, "
+      "5: greedy + P-MWSSP + P,Q-MWSSP + ILP, 6: automatic by density)");
   desc.add_options()("pricing-greedy-max-cols",
                      po::value<size_t>()->default_value(1),
                      "maximum number of columns to add with greedy pricing");
@@ -131,7 +135,7 @@ int main(int argc, const char **argv) {
         po::command_line_parser(argc, argv).options(desc).positional(pos).run(),
         vm);
     po::notify(vm);
-  } catch (po::error const &e) {
+  } catch (po::error const& e) {
     std::cerr << e.what() << std::endl;
     desc.print(std::cout);
     return 2;
@@ -159,15 +163,13 @@ int main(int argc, const char **argv) {
   params.feasibilityOtherNodesTimeLimit = vm["feas-nodes-time"].as<int>();
   params.inheritColumns = vm["inherit-cols"].as<int>();
   params.initializationBigWeight = vm["dummy-weight"].as<double>();
-  params.preprocStep1 = !vm.count("preproc-off");
-  params.preprocStep2 = !vm.count("preproc-off");
-  params.preprocStep3 = !vm.count("preproc-off");
-  params.preprocStep4 = !vm.count("preproc-off");
+  params.preprocessing = !vm.count("preproc-off");
   params.usePool = vm.count("pool");
-  params.pricingHeur1 = !vm.count("pricing-greedy-off");
-  params.pricingHeur2 = !vm.count("pricing-pq-mwsp-off");
-  params.pricingHeur3 = !vm.count("pricing-p-mwsp-off");
-  params.pricingOrder = vm["pricing-order"].as<int>();
+  params.pricingMethod = vm["pricing-method"].as<int>();
+  if (params.pricingMethod < 0 || params.pricingMethod > 6) {
+    std::cerr << "pricing-method must be an integer in [0, 6]" << std::endl;
+    return 2;
+  }
   params.pricingHeur1MaxNCols = vm["pricing-greedy-max-cols"].as<size_t>();
   params.pricingHeur1Alpha = vm["pricing-greedy-alpha"].as<double>();
   params.pricingExactTimeLimit = vm["pricing-exact-time"].as<size_t>();
@@ -200,32 +202,31 @@ int main(int argc, const char **argv) {
   }
 
   // Read inputs
-  for (const std::string &file : inputs) {
-
+  for (const std::string& file : inputs) {
     auto path = fs::path(file);
     std::cout << "-> Input file: " << path << std::endl;
 
     // Open input files
     std::ifstream inGraph(path.string() + ".graph");
-    std::ifstream inPartA(path.string() + ".partA");
-    std::ifstream inPartB(path.string() + ".partB");
-    if (!inGraph.is_open() || !inPartA.is_open() || !inPartB.is_open()) {
+    std::ifstream inPartP(path.string() + ".partP");
+    std::ifstream inPartQ(path.string() + ".partQ");
+    if (!inGraph.is_open() || !inPartP.is_open() || !inPartQ.is_open()) {
       std::cerr << "Error opening files" << std::endl;
       return 2;
     }
 
     // Read DPCP instance
     Graph graph;
-    size_t nA, nB;
-    std::tie(graph, nA, nB) = read_dpcp_instance(inGraph, inPartA, inPartB);
+    Partition P, Q;
+    std::tie(graph, P, Q) = read_dpcp_instance(inGraph, inPartP, inPartQ);
+    size_t nP = P.size();
+    size_t nQ = Q.size();
 
     for (size_t run = 0; run < repetitions; ++run) {
-
       // Get name for the current run
       fs::path currentName(path.stem().string() + "-" + solver + "-" +
                            std::to_string(run) + ".txt");
       if (vm.count("out")) {
-
         // Set output file names
         for (auto [key, _] : outDirs) {
           outDirs[key].replace_filename(currentName);
@@ -258,15 +259,15 @@ int main(int argc, const char **argv) {
       Col col;
 
       // Polymorphic output handling
-      auto handle_output = [&](Stats &stats) {
+      auto handle_output = [&](Stats& stats) {
         // Complete stats
         stats.solver = solver;
         stats.instance = path.stem().string();
         stats.run = static_cast<int>(run);
         stats.nvertices = static_cast<int>(num_vertices(graph));
         stats.nedges = static_cast<int>(num_edges(graph));
-        stats.nA = static_cast<int>(nA);
-        stats.nB = static_cast<int>(nB);
+        stats.nP = static_cast<int>(nP);
+        stats.nQ = static_cast<int>(nQ);
 
         // Write stats
         if (vm.count("out")) {
@@ -281,7 +282,7 @@ int main(int argc, const char **argv) {
         // Write coloring
         if (stats.state == OPTIMAL || stats.state == FEASIBLE) {
           std::ofstream solFile(outDirs["sol"].string(), std::ofstream::app);
-          col.write_coloring(graph, solFile);
+          col.write_coloring(solFile);
         }
       };
 
@@ -289,62 +290,62 @@ int main(int argc, const char **argv) {
       Stats stats;
       if (solver == "byp") {
         out.logFile << "Solving instance " << path << " with B&P" << std::endl;
-        Graph *gcopy = new Graph;
-        graph_copy(graph, *gcopy);
+        DPCPInst origDpcp(graph, P, Q);
+        DPCPInst rootDpcp(origDpcp);
         Pool pool;
-        LP *lp = new LP(gcopy, params, pool, graph, out.colFile, true);
-        Node *root = new Node(lp);
-        BP<Col> bp(params, out.logFile, col, vm["ub"].as<double>());
-        stats = bp.solve(root);
+        LP lp(std::move(rootDpcp), std::move(pool), origDpcp, params, stats,
+              out.colFile, true);
+        Node root(std::move(lp));
+        BP bp(params, out.logFile, col, vm["ub"].as<double>());
+        stats = bp.solve(std::move(root));
       } else if (solver == "compact") {
         out.logFile << "Solving instance " << path << " with compact ILP"
                     << std::endl;
-        stats = solve_ilp(graph, params, out.logFile, col);
+        DPCPInst dpcp(graph, P, Q);
+        stats = solve_ilp(dpcp, params, out.logFile, col);
       } else if (solver == "heur") {
         out.logFile << "Solving instance " << path << " with DPCP heuristic"
                     << std::endl;
-        Graph *gcopy = new Graph;
-        graph_copy(graph, *gcopy);
-        GraphEnv genv(gcopy, params.preprocStep1, params.preprocStep2,
-                      params.preprocStep3, params.preprocStep4, false);
+        DPCPInst dpcp(graph, P, Q);
+        if (params.preprocessing) dpcp.preprocess();
         HeurStats heurStats;
         Col gcol;
         switch (params.heuristicRootNode) {
-        case 1:
-          heurStats = dpcp_1_step_greedy_heur(genv, gcol);
-          break;
-        case 2:
-          heurStats = dpcp_2_step_greedy_heur(genv, gcol, params);
-          break;
-        case 3:
-        case 4:
-          out.iterFile << stats.instance << "," << stats.solver;
-          heurStats =
-              dpcp_2_step_semigreedy_heur(genv, gcol, params, out.iterFile);
-          break;
-        default:
-          std::cerr << "Unknown heuristic root node: "
-                    << params.heuristicRootNode << std::endl;
-          return 2;
+          case 1:
+            heurStats = dpcp_1_step_greedy_heur(dpcp, gcol);
+            break;
+          case 2:
+            heurStats = dpcp_2_step_greedy_heur(dpcp, gcol, params);
+            break;
+          case 3:
+          case 4:
+            out.iterFile << path.stem().string() << "," << solver;
+            heurStats =
+                dpcp_2_step_semigreedy_heur(dpcp, gcol, params, out.iterFile);
+            break;
+          default:
+            std::cerr << "Unknown heuristic root node: "
+                      << params.heuristicRootNode << std::endl;
+            return 2;
         }
         // Recover coloring for the original graph
-        gcol.translate_coloring(*gcopy, graph, col);
-        assert(col.check_coloring(graph));
+        DPCPInst origDpcp(graph, P, Q);
+        col = gcol.translate_coloring(dpcp, origDpcp);
+        col.color_isolated_vertices(origDpcp, dpcp.get_isolated_vertices());
+        assert(col.check_coloring(origDpcp));
         handle_output(heurStats);
-        delete gcopy;
-        return 0;
+        continue;
       } else if (solver == "feas-enum") {
         out.logFile << "Deciding feasibility of instance " << path
                     << " with enumerative method" << std::endl;
-        stats = dpcp_decide_feasibility_enumerative(
-            GraphEnv(&graph, false, false, false, false, true), col,
-            out.logFile);
+        DPCPInst dpcp(graph, P, Q);
+        stats = dpcp_decide_feasibility_enumerative(dpcp, col, out.logFile);
       } else if (solver == "feas-ilp") {
         out.logFile << "Deciding feasibility of instance " << path
                     << " with ILP" << std::endl;
-        stats = dpcp_decide_feasibility_ilp(
-            GraphEnv(&graph, false, false, false, false, true), col,
-            params.timeLimit, out.logFile);
+        DPCPInst dpcp(graph, P, Q);
+        stats = dpcp_decide_feasibility_ilp(dpcp, col, params.timeLimit,
+                                            out.logFile);
       } else {
         std::cerr << "Unknown solver: " << solver << std::endl;
         return 2;

@@ -3,7 +3,7 @@
 // (ii) Build a set of candidates, containing every vertex (a,b) of V_a
 // such that: (1) some vertex in V^b is already colored or (2) (a,b) has
 // the lowest degree of saturation in V_a
-VertexVector vertices_selector(const GraphEnv &genv, Col &col,
+VertexVector vertices_selector(const DPCPInst &dpcp, Col &col,
                                const InfoMap &info, VaSizeMap &nVa, ASet &A,
                                bool greedy) {
 
@@ -31,10 +31,10 @@ VertexVector vertices_selector(const GraphEnv &genv, Col &col,
   // Set of candidates
   VertexVector candidates1, candidates2;
   size_t minDSat = std::numeric_limits<size_t>::max();
-  for (Vertex v : genv.Va.at(a)) {
+  for (Vertex v : dpcp.Va.at(a)) {
     if (info.at(v).removed)
       continue;
-    TypeB b = genv.graph[v].second;
+    TypeB b = dpcp.get_graph()[v].second;
     if (col.is_colored_B(b)) {
       candidates1.push_back(v);
       continue;
@@ -58,7 +58,7 @@ VertexVector vertices_selector(const GraphEnv &genv, Col &col,
 // vertices. If there is none, do the same with a new color. Return the
 // vertex, the color, and the set of invalidated vertices
 std::tuple<Vertex, Color, VertexSet>
-greedy_vertex_color_selector(const GraphEnv &genv, Col &col,
+greedy_vertex_color_selector(const DPCPInst &dpcp, Col &col,
                              const InfoMap &info, const VaSizeMap &nVa,
                              const VertexVector &vCandidates) {
 
@@ -73,8 +73,8 @@ greedy_vertex_color_selector(const GraphEnv &genv, Col &col,
 
     // Find candidate colors for u
     std::vector<Color> colors;
-    if (col.is_colored_B(genv.graph[u].second))
-      colors.push_back(col.get_color_B(genv.graph[u].second));
+    if (col.is_colored_B(dpcp.get_graph()[u].second))
+      colors.push_back(col.get_color_B(dpcp.get_graph()[u].second));
     else {
       for (size_t i = 0; i < col.get_n_colors(); ++i)
         if (!info.at(u).adjColors.contains(i))
@@ -93,13 +93,13 @@ greedy_vertex_color_selector(const GraphEnv &genv, Col &col,
         continue;
       VertexSet inv;
       try {
-        inv = get_invalidated_vertices(genv, col, info, nVa, u, k);
+        inv = get_invalidated_vertices(dpcp, col, info, nVa, u, k);
       } catch (...) {
         continue;
       }
       if ((hasNewColor && !newColor) || inv.size() < n_minInv ||
-          (inv.size() == n_minInv && genv.getId.at(u) < genv.getId.at(v)) ||
-          (inv.size() == n_minInv && genv.getId.at(u) == genv.getId.at(v) &&
+          (inv.size() == n_minInv && dpcp.get_current_id(u) < dpcp.get_current_id(v)) ||
+          (inv.size() == n_minInv && dpcp.get_current_id(u) == dpcp.get_current_id(v) &&
            k < c)) {
         n_minInv = inv.size();
         minInv = inv;
@@ -120,7 +120,7 @@ greedy_vertex_color_selector(const GraphEnv &genv, Col &col,
 
 // Incorporate some randomness in the greedy selection
 std::tuple<Vertex, Color, VertexSet>
-semigreedy_vertex_color_selector(const GraphEnv &genv, Col &col,
+semigreedy_vertex_color_selector(const DPCPInst &dpcp, Col &col,
                                  const InfoMap &info, const VaSizeMap &nVa,
                                  const VertexVector &vCandidates) {
 
@@ -135,8 +135,8 @@ semigreedy_vertex_color_selector(const GraphEnv &genv, Col &col,
 
     // Find candidate colors for u
     std::vector<Color> colors;
-    if (col.is_colored_B(genv.graph[u].second))
-      colors.push_back(col.get_color_B(genv.graph[u].second));
+    if (col.is_colored_B(dpcp.get_graph()[u].second))
+      colors.push_back(col.get_color_B(dpcp.get_graph()[u].second));
     else {
       for (size_t i = 0; i < col.get_n_colors(); ++i)
         if (!info.at(u).adjColors.contains(i))
@@ -149,7 +149,7 @@ semigreedy_vertex_color_selector(const GraphEnv &genv, Col &col,
       bool newColor = (k == static_cast<int>(col.get_n_colors()));
       VertexSet inv;
       try {
-        inv = get_invalidated_vertices(genv, col, info, nVa, u, k);
+        inv = get_invalidated_vertices(dpcp, col, info, nVa, u, k);
       } catch (...) {
         continue;
       }
@@ -188,33 +188,33 @@ semigreedy_vertex_color_selector(const GraphEnv &genv, Col &col,
 
 // One-step heuristic for DPCP
 // Return false if it is not possible to color the graph
-bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
+bool single_step(const DPCPInst &dpcp, Col &col, bool greedy) {
 
   // Map with the necessary information of each vertex
   std::map<Vertex, Heur1SVertexInfo> info;
 
   // Map with the size of each Va
   std::map<TypeA, size_t> nVa;
-  for (auto &[a, Va] : genv.Va)
+  for (auto &[a, Va] : dpcp.Va)
     nVa.emplace(a, Va.size());
 
   // Fill the information of the vertices and add them to the candidate list
-  for (Vertex u : boost::make_iterator_range(vertices(genv.graph)))
-    info.emplace(u, Heur1SVertexInfo(genv.graph, u));
+  for (Vertex u : boost::make_iterator_range(vertices(dpcp.get_graph())))
+    info.emplace(u, Heur1SVertexInfo(dpcp.get_graph(), u));
 
   // Subset of A that has not been processed yet
-  ASet A(genv.idA2TyA.begin(), genv.idA2TyA.end());
+  ASet A(dpcp.idA2TyA.begin(), dpcp.idA2TyA.end());
 
   while (!A.empty()) {
 
-    auto vCandidates = vertices_selector(genv, col, info, nVa, A, greedy);
+    auto vCandidates = vertices_selector(dpcp, col, info, nVa, A, greedy);
     std::tuple<Vertex, Color, VertexSet> tuple;
     try {
       if (greedy)
-        tuple = greedy_vertex_color_selector(genv, col, info, nVa, vCandidates);
+        tuple = greedy_vertex_color_selector(dpcp, col, info, nVa, vCandidates);
       else
         tuple =
-            semigreedy_vertex_color_selector(genv, col, info, nVa, vCandidates);
+            semigreedy_vertex_color_selector(dpcp, col, info, nVa, vCandidates);
     } catch (...) {
       return false;
     }
@@ -224,11 +224,11 @@ bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
 
     // Color u with i
     info.at(u).color = i;
-    col.set_color(genv.graph, u, i);
+    col.set_color(dpcp.get_graph(), u, i);
     // info.at(u).print_info();
 
     // Invalidate the remaining vertices of Va
-    for (Vertex v : genv.Va.at(genv.graph[u].first))
+    for (Vertex v : dpcp.Va.at(dpcp.get_graph()[u].first))
       if (v != u && !info.at(v).removed)
         inv.insert(v);
 
@@ -254,14 +254,14 @@ bool single_step(const GraphEnv &genv, Col &col, bool greedy) {
 
 // One-step semigreedy heuristic for DPCP
 // Semigreedy version of the one-step heuristic
-Stats dpcp_1_step_semigreedy_heur(const GraphEnv &genv, Col &col,
+Stats dpcp_1_step_semigreedy_heur(const DPCPInst &dpcp, Col &col,
                                   size_t nIters) {
   TimePoint start = ClockType::now();
   Stats stats;
 
   while (nIters-- > 0) {
     Col newCol;
-    bool success = single_step(genv, newCol, false);
+    bool success = single_step(dpcp, newCol, false);
     if (!success)
       continue;
     if (col.get_n_colors() == 0 || newCol.get_n_colors() < col.get_n_colors())
@@ -271,7 +271,7 @@ Stats dpcp_1_step_semigreedy_heur(const GraphEnv &genv, Col &col,
   if (col.get_n_colors() == 0) {
     stats.state = INFEASIBLE;
   } else {
-    assert(col.check_coloring(genv.graph));
+    assert(col.check_coloring(dpcp.get_graph()));
     stats.state = FEASIBLE;
     stats.ub = static_cast<double>(col.get_n_colors());
   }
@@ -280,3 +280,4 @@ Stats dpcp_1_step_semigreedy_heur(const GraphEnv &genv, Col &col,
   stats.time = std::chrono::duration<double>(end - start).count();
   return stats;
 }
+
