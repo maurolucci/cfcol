@@ -51,13 +51,29 @@ LP_STATE LP::solve(double timelimit, double ub) {
   coloring.reset_coloring();
   state = LP_UNSOLVED;
 
+  if (params.is_verbose(2)) {
+    log << "LP solve start: root=" << (isRoot ? "yes" : "no")
+        << ", |V|=" << num_vertices(dpcp.get_graph())
+        << ", |E|=" << num_edges(dpcp.get_graph()) << ", |P|=" << dpcp.get_nP()
+        << ", |Q|=" << dpcp.get_nQ() << ", timelimit=" << timelimit
+        << ", ub=" << ub << ", |Pool|=" << pool.size() << std::endl;
+  }
+
   // Preprocess the instance
   if (params.preprocessing) dpcp.preprocess(isRoot);
+
+  if (params.is_verbose(2)) {
+    log << "LP after preprocess: |V|=" << num_vertices(dpcp.get_graph())
+        << ", |E|=" << num_edges(dpcp.get_graph()) << ", |P|=" << dpcp.get_nP()
+        << ", |Q|=" << dpcp.get_nQ() << std::endl;
+  }
 
   // Infeasibility check
   if (dpcp.is_infeasible_instance()) {
     stats.ninfeasPrepro++;
     state = LP_INFEASIBLE;
+    if (params.is_verbose(2))
+      log << "LP detected infeasibility after preprocessing." << std::endl;
     return state;
   }
 
@@ -66,21 +82,32 @@ LP_STATE LP::solve(double timelimit, double ub) {
     stats.ntrivial++;
     objVal = 1.0;
     state = LP_INTEGER;
+    if (params.is_verbose(2)) log << "LP found trivial solution." << std::endl;
     return state;
   }
 
   // GCP instance check
   if (dpcp.is_gcp_instance()) {
+    if (params.is_verbose(2)) log << "LP reduced to GCP instance." << std::endl;
     return gcp_solve(timelimit, ub);
   }
 
   // Apply heuristic at the current node
   heuristic_solve();
+  if (params.is_verbose(2)) {
+    if (has_heur_solution())
+      log << "LP heuristic solution: " << coloring.get_n_colors() << " colors, "
+          << get_elapsed_time(startTime) << " seconds." << std::endl;
+    else
+      log << "LP heuristic failed to find a solution." << std::endl;
+  }
 
   // Apply feasibility check at the current node
   if (!feasibility_solve()) {
     stats.ninfeasCheck++;
     state = LP_INFEASIBLE;
+    if (params.is_verbose(2))
+      log << "LP feasibility check proved infeasibility." << std::endl;
     return state;
   }
 
@@ -92,6 +119,10 @@ LP_STATE LP::solve(double timelimit, double ub) {
 
   // Add initial columns
   add_initial_columns(cenv);
+
+  if (params.is_verbose(2)) {
+    log << "LP initialized with " << stables.size() << " columns." << std::endl;
+  }
 
   // Initialize arrays for dual values
   IloNumArray dualsP(cenv.Xenv, dpcp.get_nP());
@@ -129,20 +160,12 @@ LP_STATE LP::solve(double timelimit, double ub) {
     cplex.getDuals(dualsQ, cenv.XrestrQ);
     objVal = cplex.getObjValue();
 
-    // *******************************************************************
-    // // Print some statics
-    // // Dual values
-    // std::cout << "dual values: ";
-    // for (size_t i = 0; i < dpcp.get_nP(); ++i)
-    //   std::cout << i << ": " << dualsP[i] << " ";
-    // std::cout << std::endl;
-    // for (size_t i = 0; i < dpcp.get_nQ(); ++i)
-    //   std::cout << i << ": " << dualsQ[i] << " ";
-    // std::cout << std::endl;
-    // *******************************************************************
-
     // Pricing
     int ret = pricing(cenv, penv, dualsP, dualsQ);
+    if (params.is_verbose(2)) {
+      log << "LP pricing: ret=" << ret << ", objVal=" << objVal
+          << ", time=" << get_elapsed_time(startTime) << std::endl;
+    }
 
     if (ret > 0)
       continue;  // Keep generating columns
@@ -171,21 +194,11 @@ LP_STATE LP::solve(double timelimit, double ub) {
     IloNumArray values = IloNumArray(cenv.Xenv, cenv.Xvars.getSize());
     cplex.getValues(values, cenv.Xvars);
 
-    // *******************************************************************
-    // // Print some statics
-    // // Primal values
-    // std::cout << "primal values: ";
-    // for (int i = 0; i < cenv.Xvars.getSize(); ++i)
-    //   std::cout << values[i] << " ";
-    // std::cout << std::endl;
-    // // Objective function
-    // std::cout << "objective value: " << objVal << std::endl;
-    // // Number of columns added
-    // std::cout << "Columnas del pool: " << nPoolColsTotal << std::endl;
-    // std::cout << "Columnas heurÃƒÆ’Ã‚Â­sticas: " << nHeurColsTotal <<
-    // std::endl; std::cout << "Columnas exactas: " << nExactColsTotal <<
-    // std::endl;
-    // *******************************************************************
+    if (params.is_verbose(2)) {
+      log << "LP solve end: state=" << state << ", objVal=" << objVal
+          << ", #posVars=" << posVars.size()
+          << ", time=" << get_elapsed_time(startTime) << std::endl;
+    }
 
     // Check if dummy column was used
     if (initializedWithDummy && values[0] > EPSILON) {
@@ -197,11 +210,11 @@ LP_STATE LP::solve(double timelimit, double ub) {
       }
       // Otherwise, the initialization failed
       else {
-        std::cout << "Initialization failed" << std::endl;
-        std::cout << "Dummy variable has value " << values[0]
-                  << " and the objective value is " << objVal
-                  << " <= " << std::min(dpcp.get_nP(), dpcp.get_nQ()) + EPSILON
-                  << std::endl;
+        log << "Initialization failed" << std::endl;
+        log << "Dummy variable has value " << values[0]
+            << " and the objective value is " << objVal
+            << " <= " << std::min(dpcp.get_nP(), dpcp.get_nQ()) + EPSILON
+            << std::endl;
         state = LP_INIT_FAIL;
       }
     }
@@ -874,6 +887,12 @@ std::vector<LP> LP::branch() {
   Vertex v = branchingVertex;
   assert(v != null_v);
 
+  if (params.is_verbose(2)) {
+    log << "Branching on vertex id=" << dpcp.get_current_id(v)
+        << " (pi=" << dpcp.get_P_part(v) << ", qj=" << dpcp.get_Q_part(v) << ")"
+        << std::endl;
+  }
+
   // *******
   // ** Left branch: v is preselected
   // *******
@@ -951,6 +970,11 @@ std::vector<LP> LP::branch() {
       if (columnLeft.stable.size() > 0) poolLeft.push_back(columnLeft);
       if (columnRight.stable.size() > 0) poolRight.push_back(columnRight);
     }
+  }
+
+  if (params.is_verbose(2)) {
+    log << "Created child pools: left=" << poolLeft.size()
+        << ", right=" << poolRight.size() << std::endl;
   }
 
   // *******

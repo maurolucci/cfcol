@@ -8,9 +8,11 @@ struct Params {
   // timeLimit: overall time limit for the algorithm (in seconds)
   // dfs: use depth-first strategy in the B&P tree
   // onlyRelaxation: solve only the root node
+  // verbose: verbosity level (0: quiet, 1: low, 2: detailed)
   size_t timeLimit;
   bool dfs;
   bool onlyRelaxation;
+  int verbose;
 
   // Heuristic options
   // heuristicRootNode: type of heuristic for the root node
@@ -89,6 +91,7 @@ struct Params {
       : timeLimit(900),
         dfs(false),
         onlyRelaxation(false),
+        verbose(0),
         heuristicRootNode(3),
         heuristicOtherNodes(2),
         heuristic2stepVariant(3),
@@ -106,6 +109,10 @@ struct Params {
         pricingHeur1MaxNCols(1),
         pricingExactTimeLimit(300),
         branchingFMS(false) {};
+
+  [[nodiscard]] bool is_verbose(int level = 1) const {
+    return verbose >= level;
+  }
 
   std::string get_pricing_method_name(int method) {
     switch (method) {
@@ -192,6 +199,7 @@ struct Params {
     out << "DFS strategy: " << (dfs ? "enabled" : "disabled") << std::endl;
     out << "Only relaxation: " << (onlyRelaxation ? "enabled" : "disabled")
         << std::endl;
+    out << "Verbose level: " << verbose << std::endl;
     out << "Heuristic root node: " << heuristicRootNode
         << get_heur_name(heuristicRootNode);
     if (heuristicRootNode == 2 || heuristicRootNode == 3 ||

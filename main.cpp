@@ -16,6 +16,12 @@
 namespace po = boost::program_options;
 namespace fs = std::filesystem;
 
+namespace {
+struct NullBuffer : std::streambuf {
+  int overflow(int c) override { return c; }
+};
+}  // namespace
+
 // Output directories, initially empty
 std::map<std::string, fs::path> outDirs = {
     {"log", fs::path()},   // Directory for log file
@@ -67,6 +73,9 @@ int main(int argc, const char** argv) {
       "output directory (if not given, outputs are printed on stdout)");
   desc.add_options()("time,t", po::value<size_t>()->default_value(900),
                      "time limit in seconds (default: 900)");
+  desc.add_options()(
+      "verbose,v", po::value<int>()->implicit_value(1)->default_value(0),
+      "verbosity level (0: quiet, 1: low logging, 2: detailed logging)");
   desc.add_options()("repeat,n", po::value<size_t>()->default_value(1),
                      "number of experiment repetitions");
   desc.add_options()("dfs", "use depth-first strategy in the B&P tree");
@@ -87,7 +96,7 @@ int main(int argc, const char** argv) {
                      po::value<double>()->default_value(0.2),
                      "alpha parameter for the semi-greedy heuristic");
   desc.add_options()("heur-semigreedy-iter",
-                     po::value<size_t>()->default_value(100),
+                     po::value<size_t>()->default_value(500),
                      "number of iterations for the semi-greedy heuristic");
   desc.add_options()("feas-root", po::value<int>()->default_value(0),
                      "type of feasibility check for the root node (0: no "
@@ -149,6 +158,11 @@ int main(int argc, const char** argv) {
   std::string solver = vm["solver"].as<std::string>();
   size_t repetitions = vm["repeat"].as<size_t>();
   params.timeLimit = vm["time"].as<size_t>();
+  params.verbose = vm["verbose"].as<int>();
+  if (params.verbose < 0 || params.verbose > 2) {
+    std::cerr << "verbose must be an integer in [0, 2]" << std::endl;
+    return 2;
+  }
   params.dfs = vm.count("dfs");
   params.onlyRelaxation = vm.count("relax");
   params.heuristicRootNode = vm["heur-root"].as<int>();
@@ -200,9 +214,11 @@ int main(int argc, const char** argv) {
   }
 
   // Read inputs
+  NullBuffer nullBuffer;
+  std::ostream nullstream(&nullBuffer);
   for (const std::string& file : inputs) {
     auto path = fs::path(file);
-    std::cout << "-> Input file: " << path << std::endl;
+    if (params.is_verbose()) std::cout << "-> Input file: " << path << std::endl;
 
     // Open input files
     std::ifstream inGraph(path.string() + ".graph");
@@ -248,10 +264,14 @@ int main(int argc, const char** argv) {
                                               outDirs["col"].string(),
                                               outDirs["iter"].string())
                                      : Output();
+      std::ostream& lowLog = params.is_verbose(1) ? out.logFile : nullstream;
+      std::ostream& lpLog = params.is_verbose(2) ? out.colFile : lowLog;
 
       // Print params
-      params.print_params(out.logFile);
-      out.logFile << std::endl;
+      if (params.is_verbose()) {
+        params.print_params(lowLog);
+        lowLog << std::endl;
+      }
 
       // Coloring
       Col col;
@@ -287,23 +307,26 @@ int main(int argc, const char** argv) {
       // Solve the instance
       Stats stats;
       if (solver == "byp") {
-        out.logFile << "Solving instance " << path << " with B&P" << std::endl;
+        if (params.is_verbose())
+          lowLog << "Solving instance " << path << " with B&P" << std::endl;
         DPCPInst origDpcp(graph, P, Q);
         DPCPInst rootDpcp(origDpcp);
         Pool pool;
         LP lp(std::move(rootDpcp), std::move(pool), origDpcp, params, stats,
-              out.colFile, true);
+              lpLog, true);
         Node root(std::move(lp));
-        BP bp(params, out.logFile, col, vm["ub"].as<double>());
+        BP bp(params, lowLog, col, vm["ub"].as<double>());
         stats = bp.solve(std::move(root));
       } else if (solver == "compact") {
-        out.logFile << "Solving instance " << path << " with compact ILP"
-                    << std::endl;
+        if (params.is_verbose())
+          lowLog << "Solving instance " << path << " with compact ILP"
+                 << std::endl;
         DPCPInst dpcp(graph, P, Q);
-        stats = solve_ilp(dpcp, params, out.logFile, col);
+        stats = solve_ilp(dpcp, params, lowLog, col);
       } else if (solver == "heur") {
-        out.logFile << "Solving instance " << path << " with DPCP heuristic"
-                    << std::endl;
+        if (params.is_verbose())
+          lowLog << "Solving instance " << path << " with DPCP heuristic"
+                 << std::endl;
         DPCPInst dpcp(graph, P, Q);
         if (params.preprocessing) dpcp.preprocess();
         HeurStats heurStats;
@@ -334,18 +357,20 @@ int main(int argc, const char** argv) {
         handle_output(heurStats);
         continue;
       } else if (solver == "feas-enum") {
-        out.logFile << "Deciding feasibility of instance " << path
-                    << " with enumerative method" << std::endl;
+        if (params.is_verbose())
+          lowLog << "Deciding feasibility of instance " << path
+                 << " with enumerative method" << std::endl;
         DPCPInst dpcp(graph, P, Q);
         dpcp.preprocess();
-        stats = dpcp_decide_feasibility_enumerative(dpcp, col, out.logFile);
+        stats = dpcp_decide_feasibility_enumerative(dpcp, col, lowLog);
       } else if (solver == "feas-ilp") {
-        out.logFile << "Deciding feasibility of instance " << path
-                    << " with ILP" << std::endl;
+        if (params.is_verbose())
+          lowLog << "Deciding feasibility of instance " << path
+                 << " with ILP" << std::endl;
         DPCPInst dpcp(graph, P, Q);
         dpcp.preprocess();
         stats = dpcp_decide_feasibility_ilp(dpcp, col, params.timeLimit,
-                                            out.logFile);
+                                            lowLog);
       } else {
         std::cerr << "Unknown solver: " << solver << std::endl;
         return 2;
