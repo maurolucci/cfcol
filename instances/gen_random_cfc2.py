@@ -87,14 +87,14 @@ for i1 in V2:
 
 
 # Particiones
-nA = m
-PA = [[i for i in V2 if V2dict[i][0]==a] for a in range(nA)]
-nB = n
-PB = [[i for i in V2 if V2dict[i][1]==b] for b in range(nB)]
+nP = m
+P = [[i for i in V2 if V2dict[i][0]==pi] for pi in range(nP)]
+nQ = n
+Q = [[i for i in V2 if V2dict[i][1]==qj] for qj in range(nQ)]
 # Verificar que son particiones
 for i in V2:
-    assert(len([L for L in PA if i in L])==1) 
-    assert(len([L for L in PB if i in L])==1) 
+    assert(len([L for L in P if i in L])==1) 
+    assert(len([L for L in Q if i in L])==1) 
     
 # Exportar archivos
 # Archivo del grafo
@@ -109,26 +109,26 @@ for i in V2:
 # Archivo de claves de nodos
 archivo_diccionario = nombre_base + '.dict'
 f = open(archivo_diccionario, "w")
-f.write(f'{n2}:{nA}:{nB}\n')
+f.write(f'{n2}:{nP}:{nQ}\n')
 for i in V2:
     f.write(f'{i} {V2dict[i][0]} {V2dict[i][1]}\n')
 
 # Archivo de primera partición
-archivo_partA = nombre_base + '.partP'
-f = open(archivo_partA, "w")
-f.write(f'{n2}:{nA}\n')
-for a in range(len(PA)):
-    L = [str(i) for i in PA[a]]
-    s = f'{a} ' + f'{len(PA[a])} ' + ' '.join(L) + '\n'
+archivo_partP = nombre_base + '.partP'
+f = open(archivo_partP, "w")
+f.write(f'{n2}:{nP}\n')
+for pi in range(len(P)):
+    L = [str(i) for i in P[pi]]
+    s = f'{pi} ' + f'{len(P[pi])} ' + ' '.join(L) + '\n'
     f.write(s)
 
 # Archivo de segunda partición
-archivo_partB = nombre_base + '.partQ'
-f = open(archivo_partB, "w")
-f.write(f'{n2}:{nB}\n')
-for b in range(len(PB)):
-    L = [str(i) for i in PB[b]]
-    s = f'{b} ' + f'{len(PB[b])} ' + ' '.join(L) + '\n'
+archivo_partQ = nombre_base + '.partQ'
+f = open(archivo_partQ, "w")
+f.write(f'{n2}:{nQ}\n')
+for qj in range(len(Q)):
+    L = [str(i) for i in Q[qj]]
+    s = f'{qj} ' + f'{len(Q[qj])} ' + ' '.join(L) + '\n'
     f.write(s)
 
-print(f'Archivos {archivo_grafo}, {archivo_diccionario}, {archivo_partA} y {archivo_partB} escritos con éxito.')
+print(f'Archivos {archivo_grafo}, {archivo_diccionario}, {archivo_partP} y {archivo_partQ} escritos con éxito.')
