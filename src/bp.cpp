@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <iomanip>
+#include <optional>
 
 namespace {
 constexpr double kGapDenominatorEpsilon = 1e-6;
@@ -55,20 +56,27 @@ Stats BP::solve(Node root) {
   last_t = start_t;
   first_call = true;
 
+  auto state_after_push = [](LP_STATE lpState) -> std::optional<STATE> {
+    switch (lpState) {
+      case LP_TIME_EXCEEDED:
+        return TIME_EXCEEDED_LP;
+      case LP_TIME_EXCEEDED_PR:
+        return TIME_EXCEEDED_PR;
+      case LP_MEM_EXCEEDED:
+        return MEM_EXCEEDED_LP;
+      case LP_MEM_EXCEEDED_PR:
+        return MEM_EXCEEDED_PR;
+      case LP_INIT_FAIL:
+        return INIT_FAIL;
+      default:
+        return std::nullopt;
+    }
+  };
+
   // Push root node (and solve initial LR)
-  switch (push(std::move(root))) {
-    case LP_TIME_EXCEEDED:
-      return return_stats(TIME_EXCEEDED_LP);
-    case LP_TIME_EXCEEDED_PR:
-      return return_stats(TIME_EXCEEDED_PR);
-    case LP_MEM_EXCEEDED:
-      return return_stats(MEM_EXCEEDED_LP);
-    case LP_MEM_EXCEEDED_PR:
-      return return_stats(MEM_EXCEEDED_PR);
-    case LP_INIT_FAIL:
-      return return_stats(INIT_FAIL);
-    default:
-      break;
+  if (const auto state = state_after_push(push(std::move(root)));
+      state.has_value()) {
+    return return_stats(*state);
   }
 
   if (!params.onlyRelaxation) {
@@ -86,19 +94,9 @@ Stats BP::solve(Node root) {
 
       // Push sons (and solve initial LR)
       for (auto& n : sons) {
-        switch (push(std::move(n))) {
-          case LP_TIME_EXCEEDED:
-            return return_stats(TIME_EXCEEDED_LP);
-          case LP_TIME_EXCEEDED_PR:
-            return return_stats(TIME_EXCEEDED_PR);
-          case LP_MEM_EXCEEDED:
-            return return_stats(MEM_EXCEEDED_LP);
-          case LP_MEM_EXCEEDED_PR:
-            return return_stats(MEM_EXCEEDED_PR);
-          case LP_INIT_FAIL:
-            return return_stats(INIT_FAIL);
-          default:
-            break;
+        if (const auto state = state_after_push(push(std::move(n)));
+            state.has_value()) {
+          return return_stats(*state);
         }
       }
     }
