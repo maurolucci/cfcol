@@ -71,7 +71,7 @@ Stats solve_ilp(DPCPInst& dpcp, const Params& params, std::ostream& log,
 
   // \sum_{(a,b) \in V} \sum_{k \in C} x_(a,b)_k \geq 1, forall a \in A
   for (size_t pi = 0; pi < dpcp.get_nP(); ++pi) {
-    auto& vec = dpcp.get_P_part()[pi];
+    auto& vec = dpcp.get_P()[pi];
     IloExpr restr(cxenv);
     for (Vertex v : vec)
       for (size_t k = 0; k < ncolors; ++k)
