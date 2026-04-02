@@ -108,7 +108,6 @@ int main(int argc, const char** argv) {
   desc.add_options()("dummy-weight", po::value<double>()->default_value(1000.0),
                      "weight of dummy column during initialization");
   desc.add_options()("preproc-off", "do not preprocess the input graph");
-  desc.add_options()("pool", "use a pool of columns (currently unimplemented)");
   desc.add_options()(
       "pricing-method", po::value<int>()->default_value(6),
       "pricing method (0: ILP, 1: greedy + ILP, 2: greedy + P,Q-MWSSP + ILP, "
@@ -164,7 +163,6 @@ int main(int argc, const char** argv) {
   params.inheritColumns = vm["inherit-cols"].as<int>();
   params.initializationBigWeight = vm["dummy-weight"].as<double>();
   params.preprocessing = !vm.count("preproc-off");
-  params.usePool = vm.count("pool");
   params.pricingMethod = vm["pricing-method"].as<int>();
   if (params.pricingMethod < 0 || params.pricingMethod > 6) {
     std::cerr << "pricing-method must be an integer in [0, 6]" << std::endl;
