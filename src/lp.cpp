@@ -1110,9 +1110,13 @@ std::vector<LP> LP::branch() {
              stats, log);
 
   if (params.inheritColumns == 3 || params.inheritColumns == 4) {
-    lpLeft.lateColumns = std::move(lateLeft);
-    lpRight.lateColumns = std::move(lateRight);
+    lpLeft.lateColumns = lateLeft;
+    lpRight.lateColumns = lateRight;
   }
 
-  return std::vector<LP>{lpLeft, lpRight};
+  std::vector<LP> sons;
+  sons.reserve(2);
+  sons.emplace_back(std::move(lpLeft));
+  sons.emplace_back(std::move(lpRight));
+  return sons;
 }
