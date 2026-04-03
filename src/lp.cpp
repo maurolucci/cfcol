@@ -824,6 +824,8 @@ Vertex LP::get_branching_variable_FMS(const IloNumArray& values) {
 
   // *******************************************************************
   // Print some statics
+  size_t pi = dpcp.get_P_part(best_v);
+  size_t qj = dpcp.get_Q_part(best_v);
   std::cout << "branching variable: " << best_v << " ["
             << dpcp.get_graph()[best_v].pi << " " << dpcp.get_graph()[best_v].qj
             << "] with size " << best_nPartial << " and cardinality "
