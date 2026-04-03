@@ -897,11 +897,13 @@ Vertex LP::get_branching_variable_FMS(const IloNumArray& values) {
     }
   }
 
+  // If no such pi exists, choose the first pi such that P[pi] has more than 1
+  // vertex
   if (best_pi == nP) {
     // Choose by index
     for (size_t pi = 0; pi < dpcp.get_nP(); ++pi)
       if (dpcp.get_P()[pi].size() > 1) {
-        best_v = dpcp.get_P()[pi].front();
+        best_pi = pi;
         break;
       }
   }
