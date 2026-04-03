@@ -1104,12 +1104,14 @@ std::vector<LP> LP::branch() {
   // *******
   // ** Create LPs
   // *******
-  LP lpLeft(dpcpLeft, poolLeft, origDpcp, params, stats, log);
-  LP lpRight(dpcpRight, poolRight, origDpcp, params, stats, log);
+  LP lpLeft(std::move(dpcpLeft), std::move(poolLeft), origDpcp, params, stats,
+            log);
+  LP lpRight(std::move(dpcpRight), std::move(poolRight), origDpcp, params,
+             stats, log);
 
   if (params.inheritColumns == 3 || params.inheritColumns == 4) {
-    lpLeft.lateColumns = lateLeft;
-    lpRight.lateColumns = lateRight;
+    lpLeft.lateColumns = std::move(lateLeft);
+    lpRight.lateColumns = std::move(lateRight);
   }
 
   return std::vector<LP>{lpLeft, lpRight};
