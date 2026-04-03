@@ -121,8 +121,14 @@ LP_STATE LP::solve(double timelimit, double ub) {
   // Add initial columns
   add_initial_columns(cenv);
 
+  // Add late columns (e.g., positive parent columns in mode 3)
+  for (auto& col : lateColumns) {
+    add_column(cenv, col);
+  }
+
   if (params.is_verbose(2)) {
-    log << "LP initialized with " << stables.size() << " columns." << std::endl;
+    log << "LP initialized with " << stables.size() << " columns ("
+        << lateColumns.size() << " late)." << std::endl;
   }
 
   // Initialize arrays for dual values
@@ -1003,50 +1009,80 @@ std::vector<LP> LP::branch() {
   dpcpRight.forbid_vertex(itRightBranch->second);
 
   // *******
-  // ** Create pools
+  // ** Helper lambda to translate columns to a branch
   // *******
-  Pool poolLeft, poolRight;
-
-  if (params.inheritColumns > 0) {
-    size_t ncolumns =
-        params.inheritColumns == 1 ? stables.size() : posVars.size();
-    for (size_t i = 0; i < ncolumns; ++i) {
-      Column& column =
-          params.inheritColumns == 1 ? stables[i] : stables[posVars[i]];
-      Column columnLeft, columnRight;
+  auto translate_columns = [this](const std::vector<size_t>& indices,
+                                  const std::map<Vertex, Vertex>& branchMap,
+                                  const DPCPInst& branchDpcp) -> Pool {
+    Pool result;
+    for (size_t i : indices) {
+      Column& column = stables[i];
+      Column translatedCol;
       for (auto u : column.stable) {
-        // We need to check if the vertex is still in the left and right graphs,
-        // otherwise we ignore it
-        auto itLeft = mapLeft.find(u);
-        if (itLeft != mapLeft.end()) {
-          Vertex uLeft = itLeft->second;
-          if (dpcpLeft.has_vertex(uLeft))
-            columnLeft.add_vertex(uLeft, dpcpLeft.get_P_part(uLeft),
-                                  dpcpLeft.get_Q_part(uLeft));
-        }
-        auto itRight = mapRight.find(u);
-        if (itRight != mapRight.end()) {
-          Vertex uRight = itRight->second;
-          if (dpcpRight.has_vertex(uRight))
-            columnRight.add_vertex(uRight, dpcpRight.get_P_part(uRight),
-                                   dpcpRight.get_Q_part(uRight));
+        auto it = branchMap.find(u);
+        if (it != branchMap.end()) {
+          Vertex uBranch = it->second;
+          if (branchDpcp.has_vertex(uBranch))
+            translatedCol.add_vertex(uBranch, branchDpcp.get_P_part(uBranch),
+                                     branchDpcp.get_Q_part(uBranch));
         }
       }
-      if (columnLeft.stable.size() > 0) poolLeft.push_back(columnLeft);
-      if (columnRight.stable.size() > 0) poolRight.push_back(columnRight);
+      if (translatedCol.stable.size() > 0) result.push_back(translatedCol);
+    }
+    return result;
+  };
+
+  // *******
+  // ** Create pools and collect late columns
+  // *******
+  Pool poolLeft, poolRight, lateLeft, lateRight;
+
+  if (params.inheritColumns > 0) {
+    if (params.inheritColumns == 3) {
+      // Mode 3: positive columns go directly to LP, non-positive go to pool
+      std::vector<size_t> nonPositiveIndices;
+      for (size_t i = 0; i < stables.size(); ++i) {
+        if (std::find(posVars.begin(), posVars.end(), i) == posVars.end())
+          nonPositiveIndices.push_back(i);
+      }
+      lateLeft = translate_columns(posVars, mapLeft, dpcpLeft);
+      poolLeft = translate_columns(nonPositiveIndices, mapLeft, dpcpLeft);
+      lateRight = translate_columns(posVars, mapRight, dpcpRight);
+      poolRight = translate_columns(nonPositiveIndices, mapRight, dpcpRight);
+    } else {
+      // Modes 1, 2: columns go to pool (all or positive only)
+      std::vector<size_t> inheritIndices;
+      if (params.inheritColumns == 1) {
+        for (size_t i = 0; i < stables.size(); ++i) inheritIndices.push_back(i);
+      } else {
+        inheritIndices = posVars;
+      }
+      poolLeft = translate_columns(inheritIndices, mapLeft, dpcpLeft);
+      poolRight = translate_columns(inheritIndices, mapRight, dpcpRight);
     }
   }
 
   if (params.is_verbose(2)) {
-    log << "Created child pools: left=" << poolLeft.size()
-        << ", right=" << poolRight.size() << std::endl;
+    if (params.inheritColumns == 3)
+      log << "Created child pools: left(pool)=" << poolLeft.size()
+          << ", left(late)=" << lateLeft.size()
+          << ", right(pool)=" << poolRight.size()
+          << ", right(late)=" << lateRight.size() << std::endl;
+    else
+      log << "Created child pools: left=" << poolLeft.size()
+          << ", right=" << poolRight.size() << std::endl;
   }
 
   // *******
   // ** Create LPs
   // *******
+  LP lpLeft(dpcpLeft, poolLeft, origDpcp, params, stats, log);
+  LP lpRight(dpcpRight, poolRight, origDpcp, params, stats, log);
 
-  return std::vector<LP>{
-      LP(dpcpLeft, poolLeft, origDpcp, params, stats, log),
-      LP(dpcpRight, poolRight, origDpcp, params, stats, log)};
+  if (params.inheritColumns == 3) {
+    lpLeft.lateColumns = lateLeft;
+    lpRight.lateColumns = lateRight;
+  }
+
+  return std::vector<LP>{lpLeft, lpRight};
 }

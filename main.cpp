@@ -78,9 +78,8 @@ int main(int argc, const char** argv) {
       "verbosity level (0: quiet, 1: low logging, 2: detailed logging)");
   desc.add_options()("repeat,n", po::value<size_t>()->default_value(1),
                      "number of experiment repetitions");
-  desc.add_options()(
-      "tree-search", po::value<int>()->default_value(1),
-      "tree search strategy in B&P (1: best-bound, 2: dfs)");
+  desc.add_options()("tree-search", po::value<int>()->default_value(1),
+                     "tree search strategy in B&P (1: best-bound, 2: dfs)");
   desc.add_options()("relax", "solve only the root node");
   desc.add_options()("ub", po::value<double>()->default_value(DBL_MAX),
                      "initial upper bound on the optimal solution value");
@@ -113,9 +112,10 @@ int main(int argc, const char** argv) {
       "feas-nodes-time", po::value<int>()->default_value(60),
       "time limit for feasibility check (in seconds). Only for ILP");
   desc.add_options()(
-      "inherit-cols", po::value<int>()->default_value(1),
+      "inherit-cols", po::value<int>()->default_value(3),
       "type of column inheritance from parent (0: no inheritance, 1: inherit "
-      "all columns, 2: inherit only positive columns)");
+      "all columns, 2: inherit only positive columns, 3: positive columns to "
+      "LP, others to pool)");
   desc.add_options()("dummy-weight", po::value<double>()->default_value(1000.0),
                      "weight of dummy column during initialization");
   desc.add_options()("preproc-off", "do not preprocess the input graph");
@@ -129,16 +129,16 @@ int main(int argc, const char** argv) {
                      "maximum number of columns to add with greedy pricing");
   desc.add_options()("pricing-max-cols-per-iter",
                      po::value<size_t>()->default_value(10),
-                     "maximum number of best columns added per pricing call (pool and greedy)");
+                     "maximum number of best columns added per pricing call "
+                     "(pool and greedy)");
   desc.add_options()("pricing-greedy-alpha",
                      po::value<double>()->default_value(0.2),
                      "alpha parameter for the greedy pricing heuristic");
   desc.add_options()("pricing-exact-time",
                      po::value<size_t>()->default_value(300),
                      "time limit for exact pricing (in seconds)");
-  desc.add_options()(
-      "branching-variable", po::value<int>()->default_value(1),
-      "branching variable rule (1: FMS, 2: LNTT)");
+  desc.add_options()("branching-variable", po::value<int>()->default_value(1),
+                     "branching variable rule (1: FMS, 2: LNTT)");
 
   po::positional_options_description pos;
   pos.add("graph", -1);
@@ -185,6 +185,10 @@ int main(int argc, const char** argv) {
   params.feasibilityOtherNodes = vm["feas-nodes"].as<int>();
   params.feasibilityOtherNodesTimeLimit = vm["feas-nodes-time"].as<int>();
   params.inheritColumns = vm["inherit-cols"].as<int>();
+  if (params.inheritColumns < 0 || params.inheritColumns > 3) {
+    std::cerr << "inherit-cols must be an integer in [0, 3]" << std::endl;
+    return 2;
+  }
   params.initializationBigWeight = vm["dummy-weight"].as<double>();
   params.preprocessing = !vm.count("preproc-off");
   params.pricingMethod = vm["pricing-method"].as<int>();
@@ -198,8 +202,7 @@ int main(int argc, const char** argv) {
   params.pricingExactTimeLimit = vm["pricing-exact-time"].as<size_t>();
   params.branchingVariable = vm["branching-variable"].as<int>();
   if (params.branchingVariable < 1 || params.branchingVariable > 2) {
-    std::cerr << "branching-variable must be an integer in [1, 2]"
-              << std::endl;
+    std::cerr << "branching-variable must be an integer in [1, 2]" << std::endl;
     return 2;
   }
 

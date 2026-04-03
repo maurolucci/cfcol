@@ -46,7 +46,8 @@ class LP {
 
  private:
   DPCPInst dpcp;  // DPCP instance at the current node
-  Pool pool;      // Pool of stable sets at the current node (herited from the
+  Pool pool;      // Pool of stable sets at the current node (inherited from the parent)
+  Pool lateColumns;  // Columns to add after initialization (mode 3)
                   // parent)
   const DPCPInst& origDpcp;  // Reference to the original DPCP instance
   Params& params;      // Reference to the parameters of the algorithm
