@@ -37,6 +37,7 @@ void Node::branch(std::vector<Node>& sons) {
   std::vector<LP> lps;
   lp->branch(lps);
   sons.clear();
+  sons.reserve(lps.size());
   for (auto& l : lps) {
     sons.emplace_back(std::move(l));
   }

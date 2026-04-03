@@ -38,8 +38,22 @@ LP::LP(DPCPInst dpcp, Pool pool, const DPCPInst& origDpcp, Params& params,
       state(LP_UNSOLVED),
       initializedWithDummy(false),
       stables(),
-      posVars(),
-      pricingIters(0) {}
+      posVars() {}
+
+LP::LP(const LP& other)
+    : dpcp(other.dpcp),
+      pool(),
+      lateColumns(),
+      origDpcp(other.origDpcp),
+      params(other.params),
+      stats(other.stats),
+      log(other.log),
+      isRoot(false),
+      objVal(-1.0),
+      state(LP_UNSOLVED),
+      initializedWithDummy(false),
+      stables(),
+      posVars() {}
 
 LP::~LP() {}
 
@@ -131,7 +145,7 @@ LP_STATE LP::solve(double timelimit, double ub) {
 
   // Reset per-LP pricing summary
   pricingSummary = PricingSummary();
-  pricingIters = 0;
+  pricingSummary.iters = 0;
 
   // Start the column generation loop
   while (state == LP_UNSOLVED) {
@@ -163,7 +177,7 @@ LP_STATE LP::solve(double timelimit, double ub) {
     objVal = cplex.getObjValue();
 
     // Pricing
-    pricingIters++;
+    pricingSummary.iters++;
     int ret = pricing(cenv, penv, dualsP, dualsQ);
 
     if (ret > 0)
@@ -593,7 +607,7 @@ void LP::log_pricing_summary() const {
                      pricingSummary.timePQmwss + pricingSummary.timePmwss +
                      pricingSummary.timeExact;
 
-  log << "pricing summary: iters=" << pricingIters
+  log << "pricing summary: iters=" << pricingSummary.iters
       << ", total_calls=" << totalCalls << ", total_cols=" << totalCols
       << ", total_time=" << totalTime << std::endl;
   log << "  pool: calls=" << pricingSummary.callsPool
@@ -981,12 +995,16 @@ void LP::branch(std::vector<LP>& sons) {
         << ")" << std::endl;
   }
 
+  sons.clear();
+  sons.reserve(2);
+  sons.emplace_back(*this);
+  sons.emplace_back(*this);
+
   // *******
   // ** Left branch: v is preselected
   // *******
 
-  // Create a copy of the original DPCP
-  DPCPInst dpcpLeft(dpcp);
+  DPCPInst& dpcpLeft = sons[0].get_dpcp_inst();
   Graph& graphLeft = dpcpLeft.get_graph();
 
   // Map from original vertices to new vertices
@@ -1008,8 +1026,7 @@ void LP::branch(std::vector<LP>& sons) {
   // ** Right branch: v is forbidden
   // *******
 
-  // Create a copy of the original DPCP
-  DPCPInst dpcpRight(dpcp);
+  DPCPInst& dpcpRight = sons[1].get_dpcp_inst();
   Graph& graphRight = dpcpRight.get_graph();
 
   // Map from original vertices to new vertices
@@ -1021,7 +1038,7 @@ void LP::branch(std::vector<LP>& sons) {
     mapRight.emplace(v, uRight);
   }
 
-  // Preselect v in the right DPCP instance
+  // Forbid v in the right DPCP instance
   auto itRightBranch = mapRight.find(v);
   assert(itRightBranch != mapRight.end());
   dpcpRight.forbid_vertex(itRightBranch->second);
@@ -1054,9 +1071,12 @@ void LP::branch(std::vector<LP>& sons) {
   };
 
   // *******
-  // ** Create pools and collect late columns
+  // ** Fill pools and late columns
   // *******
-  Pool poolLeft, poolRight, lateLeft, lateRight;
+  Pool& poolLeft = sons[0].get_pool();
+  Pool& poolRight = sons[1].get_pool();
+  Pool& lateLeft = sons[0].get_late_columns();
+  Pool& lateRight = sons[1].get_late_columns();
 
   if (params.inheritColumns > 0) {
     if (params.inheritColumns == 3) {
@@ -1099,20 +1119,6 @@ void LP::branch(std::vector<LP>& sons) {
     else
       log << "Created child pools: left=" << poolLeft.size()
           << ", right=" << poolRight.size() << std::endl;
-  }
-
-  // *******
-  // ** Create LPs
-  // *******
-  sons.clear();
-  sons.emplace_back(std::move(dpcpLeft), std::move(poolLeft), origDpcp, params,
-                    stats, log);
-  sons.emplace_back(std::move(dpcpRight), std::move(poolRight), origDpcp,
-                    params, stats, log);
-
-  if (params.inheritColumns == 3 || params.inheritColumns == 4) {
-    sons[0].lateColumns = lateLeft;
-    sons[1].lateColumns = lateRight;
   }
 
   return;

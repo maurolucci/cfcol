@@ -25,6 +25,7 @@ class LP {
  public:
   LP(DPCPInst dpcp, Pool pool, const DPCPInst& origDpcp, Params& params,
      Stats& stats, std::ostream& log, bool isRoot = false);
+  LP(const LP& other);
   ~LP();
 
   // Optimize the linear relaxation by column generation
@@ -40,6 +41,12 @@ class LP {
   };
   Col get_heur_solution();
   Col get_lp_solution();
+
+  // Getters for branching
+  [[nodiscard]] Vertex get_branching_vertex() const { return branchingVertex; }
+  DPCPInst& get_dpcp_inst() { return dpcp; }
+  Pool& get_pool() { return pool; }
+  Pool& get_late_columns() { return lateColumns; }
 
   // Branch
   void branch(std::vector<LP>& sons);
@@ -85,10 +92,10 @@ class LP {
     double timePQmwss = 0.0;
     double timePmwss = 0.0;
     double timeExact = 0.0;
+    size_t iters = 0;
   };
 
   PricingSummary pricingSummary;
-  size_t pricingIters;
 
   // Exact solve of a GCP instance
   LP_STATE gcp_solve(double timelimit, double ub);

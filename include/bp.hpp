@@ -19,14 +19,7 @@ using TimePoint = ClockType::time_point;
 
 class Node {
  public:
-  explicit Node(LP&& lp);
-
-  Node(const Node&) = delete;
-  Node& operator=(const Node&) = delete;
-  Node(Node&&) noexcept = default;
-  Node& operator=(Node&&) noexcept = default;
-
-  double get_obj_value() const;
+    double get_obj_value() const;
   bool operator>(const Node& n) const;
 
   LP_STATE solve(double timelimit, double ub);
@@ -40,7 +33,8 @@ class Node {
   void branch(std::vector<Node>& sons);
 
  private:
-  std::unique_ptr<LP> lp;
+  DPCPInst dpcp;  // DPCP instance at the current node
+  LP lp;          // LP relaxation at the current node
 };
 
 class BP {
