@@ -5,6 +5,7 @@
 #include <chrono>
 #include <iostream>
 #include <list>
+#include <memory>
 #include <vector>
 
 #include "col.hpp"
@@ -18,7 +19,12 @@ using TimePoint = ClockType::time_point;
 
 class Node {
  public:
-  explicit Node(LP lp);
+  explicit Node(LP&& lp);
+
+  Node(const Node&) = delete;
+  Node& operator=(const Node&) = delete;
+  Node(Node&&) noexcept = default;
+  Node& operator=(Node&&) noexcept = default;
 
   double get_obj_value() const;
   bool operator>(const Node& n) const;
@@ -34,7 +40,7 @@ class Node {
   std::vector<Node> branch();
 
  private:
-  LP lp;
+  std::unique_ptr<LP> lp;
 };
 
 class BP {

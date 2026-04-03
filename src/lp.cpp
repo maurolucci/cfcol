@@ -760,10 +760,10 @@ Vertex LP::get_branching_variable_LNTT(const IloNumArray& values) {
   // *******************************************************************
   // // Print some statics
   // std::cout << "branching variable: " << best_v << " ["
-  //           << dpcp.get_graph()[best_v].pi << " " <<
-  //           dpcp.get_graph()[best_v].qj
+  //           << dpcp.get_P_part(best_v) << " " <<
+  //           dpcp.get_Q_part(best_v)
   //           << "] with size "
-  //           << posSnd[dpcp.get_graph()[best_v].pi].size()
+  //           << posSnd[dpcp.get_P_part(best_v)].size()
   //           << " and value " << best_value << std::endl
   //           << std::endl;
   // *******************************************************************
@@ -823,12 +823,12 @@ Vertex LP::get_branching_variable_FMS(const IloNumArray& values) {
   assert(best_v != null_v);
 
   // *******************************************************************
-  // Print some statics;
-  std::cout << "branching variable: " << dpcp.get_current_id(best_v) << " ["
-            << dpcp.get_P_part(best_v) << " " << dpcp.get_Q_part(best_v)
-            << "] with size " << best_nPartial << " and cardinality "
-            << dpcp.get_P()[best_pi].size() << " and value " << best_value
-            << std::endl;
+  // // Print some statics;
+  // std::cout << "branching variable: " << dpcp.get_current_id(best_v) << " ["
+  //           << dpcp.get_P_part(best_v) << " " << dpcp.get_Q_part(best_v)
+  //           << "] with size " << best_nPartial << " and cardinality "
+  //           << dpcp.get_P()[best_pi].size() << " and value " << best_value
+  //           << std::endl;
   // *******************************************************************
 
   return best_v;

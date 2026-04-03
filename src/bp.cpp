@@ -13,28 +13,28 @@ inline bool should_prune_by_bound(double lowerBound, double primalBound) {
 }
 }  // namespace
 
-Node::Node(LP lp) : lp(std::move(lp)) {}
+Node::Node(LP&& lp) : lp(std::make_unique<LP>(std::move(lp))) {}
 
-double Node::get_obj_value() const { return lp.get_lower_bound(); }
+double Node::get_obj_value() const { return lp->get_lower_bound(); }
 
 bool Node::operator>(const Node& n) const {
   return (get_obj_value() > n.get_obj_value());
 }
 
 LP_STATE Node::solve(double timelimit, double ub) {
-  return lp.solve(timelimit, ub);
+  return lp->solve(timelimit, ub);
 }
 
-bool Node::feas_sol() const { return lp.has_heur_solution(); }
+bool Node::feas_sol() const { return lp->has_heur_solution(); }
 
-size_t Node::feas_value() const { return lp.get_upper_bound(); }
+size_t Node::feas_value() const { return lp->get_upper_bound(); }
 
-void Node::save(Col& sol) { sol = lp.get_lp_solution(); }
+void Node::save(Col& sol) { sol = lp->get_lp_solution(); }
 
-void Node::save_heur(Col& sol) { sol = lp.get_heur_solution(); }
+void Node::save_heur(Col& sol) { sol = lp->get_heur_solution(); }
 
 std::vector<Node> Node::branch() {
-  std::vector<LP> lps = lp.branch();
+  std::vector<LP> lps = lp->branch();
   std::vector<Node> sons;
 
   sons.reserve(lps.size());
