@@ -888,9 +888,9 @@ std::vector<LP> LP::branch() {
   assert(v != null_v);
 
   if (params.is_verbose(2)) {
-    log << "Branching on vertex id=" << dpcp.get_current_id(v)
-        << " (pi=" << dpcp.get_P_part(v) << ", qj=" << dpcp.get_Q_part(v) << ")"
-        << std::endl;
+    log << "Branching on vertex v with id=" << dpcp.get_current_id(v)
+        << " (p(v)=" << dpcp.get_P_part(v) << ", q(v)=" << dpcp.get_Q_part(v)
+        << ")" << std::endl;
   }
 
   // *******
@@ -904,7 +904,7 @@ std::vector<LP> LP::branch() {
   // Map from original vertices to new vertices
   // Necessary to translate the columns of the pool
   std::map<Vertex, Vertex> mapLeft;
-  for (auto [v, v_id] : origDpcp.get_vertex2CurrentId()) {
+  for (auto [v, v_id] : dpcp.get_vertex2CurrentId()) {
     Vertex uLeft = vertex(v_id, graphLeft);
     assert(uLeft != null_v);
     mapLeft.emplace(v, uLeft);
@@ -926,7 +926,7 @@ std::vector<LP> LP::branch() {
   // Map from original vertices to new vertices
   // Necessary to translate the columns of the pool
   std::map<Vertex, Vertex> mapRight;
-  for (auto [v, v_id] : origDpcp.get_vertex2CurrentId()) {
+  for (auto [v, v_id] : dpcp.get_vertex2CurrentId()) {
     Vertex uRight = vertex(v_id, graphRight);
     assert(uRight != null_v);
     mapRight.emplace(v, uRight);
