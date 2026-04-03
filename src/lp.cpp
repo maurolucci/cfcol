@@ -38,7 +38,8 @@ LP::LP(DPCPInst dpcp, Pool pool, const DPCPInst& origDpcp, Params& params,
       state(LP_UNSOLVED),
       initializedWithDummy(false),
       stables(),
-      posVars() {}
+      posVars(),
+      pricingIters(0) {}
 
 LP::~LP() {}
 
@@ -138,6 +139,10 @@ LP_STATE LP::solve(double timelimit, double ub) {
   // Initialize pricing environment
   PricingEnv penv(dpcp, params.pricingExactTimeLimit);
 
+  // Reset per-LP pricing summary
+  pricingSummary = PricingSummary();
+  pricingIters = 0;
+
   // Start the column generation loop
   while (state == LP_UNSOLVED) {
     // Set time limit
@@ -168,11 +173,8 @@ LP_STATE LP::solve(double timelimit, double ub) {
     objVal = cplex.getObjValue();
 
     // Pricing
+    pricingIters++;
     int ret = pricing(cenv, penv, dualsP, dualsQ);
-    if (params.is_verbose(2)) {
-      log << "pricing iter: ret=" << ret << ", objVal=" << objVal
-          << ", time=" << get_elapsed_time(startTime) << std::endl;
-    }
 
     if (ret > 0)
       continue;  // Keep generating columns
@@ -188,6 +190,28 @@ LP_STATE LP::solve(double timelimit, double ub) {
       state = LP_UNKNOWN;
       break;
     }
+  }
+
+  if (params.is_verbose(2)) {
+    size_t totalCols = pricingSummary.colsPool + pricingSummary.colsGreedy +
+                       pricingSummary.colsPQmwss + pricingSummary.colsPmwss +
+                       pricingSummary.colsExact;
+    double totalTime = pricingSummary.timePool + pricingSummary.timeGreedy +
+                       pricingSummary.timePQmwss + pricingSummary.timePmwss +
+                       pricingSummary.timeExact;
+    log << "pricing summary: iters=" << pricingIters
+        << ", total_cols=" << totalCols << ", total_time=" << totalTime
+        << std::endl;
+    log << "  pool: cols=" << pricingSummary.colsPool
+        << ", time=" << pricingSummary.timePool << std::endl;
+    log << "  greedy: cols=" << pricingSummary.colsGreedy
+        << ", time=" << pricingSummary.timeGreedy << std::endl;
+    log << "  P,Q-MWSS: cols=" << pricingSummary.colsPQmwss
+        << ", time=" << pricingSummary.timePQmwss << std::endl;
+    log << "  P-MWSS: cols=" << pricingSummary.colsPmwss
+        << ", time=" << pricingSummary.timePmwss << std::endl;
+    log << "  exact: cols=" << pricingSummary.colsExact
+        << ", time=" << pricingSummary.timeExact << std::endl;
   }
 
   // Save root lower bound
@@ -465,6 +489,42 @@ void LP::add_initial_columns(CplexEnv& cenv) {
 
 int LP::pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
                 IloNumArray& dualsQ) {
+  auto run_pool = [&]() {
+    auto t0 = std::chrono::high_resolution_clock::now();
+    int ret = pricing_pool(cenv, dualsP, dualsQ);
+    pricingSummary.timePool += get_elapsed_time(t0);
+    if (ret > 0) pricingSummary.colsPool += static_cast<size_t>(ret);
+    return ret;
+  };
+  auto run_greedy = [&](bool enabled) {
+    auto t0 = std::chrono::high_resolution_clock::now();
+    int ret = pricing_greedy(cenv, penv, dualsP, dualsQ, enabled);
+    pricingSummary.timeGreedy += get_elapsed_time(t0);
+    if (ret > 0) pricingSummary.colsGreedy += static_cast<size_t>(ret);
+    return ret;
+  };
+  auto run_pqmwss = [&](bool enabled) {
+    auto t0 = std::chrono::high_resolution_clock::now();
+    int ret = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, enabled);
+    pricingSummary.timePQmwss += get_elapsed_time(t0);
+    if (ret > 0) pricingSummary.colsPQmwss += static_cast<size_t>(ret);
+    return ret;
+  };
+  auto run_pmwss = [&](bool enabled) {
+    auto t0 = std::chrono::high_resolution_clock::now();
+    int ret = pricing_P_mwss(cenv, penv, dualsP, dualsQ, enabled);
+    pricingSummary.timePmwss += get_elapsed_time(t0);
+    if (ret > 0) pricingSummary.colsPmwss += static_cast<size_t>(ret);
+    return ret;
+  };
+  auto run_exact = [&]() {
+    auto t0 = std::chrono::high_resolution_clock::now();
+    int ret = pricing_exact(cenv, penv, dualsP, dualsQ);
+    pricingSummary.timeExact += get_elapsed_time(t0);
+    if (ret > 0) pricingSummary.colsExact += static_cast<size_t>(ret);
+    return ret;
+  };
+
   int addedCols = 0;
   bool useGreedy = false;
   bool usePQmwss = false;
@@ -515,39 +575,38 @@ int LP::pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
   }
 
   // First, look for entering columns in the pool
-  addedCols = pricing_pool(cenv, dualsP, dualsQ);
+  addedCols = run_pool();
   if (addedCols > 0) return addedCols;
 
   // Second, look for entering columns with a greedy heuristic
-  addedCols = pricing_greedy(cenv, penv, dualsP, dualsQ, useGreedy);
+  addedCols = run_greedy(useGreedy);
   if (addedCols > 0) return addedCols;
 
   if (pricingOrder == 1) {
     // Third, P,Q-MWSSP heuristic
-    addedCols = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, usePQmwss);
+    addedCols = run_pqmwss(usePQmwss);
     if (addedCols > 0) return addedCols;
 
     // Fourth, P-MWSSP heuristic
-    addedCols = pricing_P_mwss(cenv, penv, dualsP, dualsQ, usePmwss);
+    addedCols = run_pmwss(usePmwss);
     if (addedCols >= 0) return addedCols;
   } else {
     // Third, P-MWSSP heuristic
-    addedCols = pricing_P_mwss(cenv, penv, dualsP, dualsQ, usePmwss);
+    addedCols = run_pmwss(usePmwss);
     if (addedCols >= 0) return addedCols;
 
     // Fourth, P,Q-MWSSP heuristic
-    addedCols = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, usePQmwss);
+    addedCols = run_pqmwss(usePQmwss);
     if (addedCols > 0) return addedCols;
   }
 
   // Fifth, exact resolution of pricing
-  return pricing_exact(cenv, penv, dualsP, dualsQ);
+  return run_exact();
 }
 
 int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
   auto startTime = std::chrono::high_resolution_clock::now();
   size_t nPoolCols = 0;
-  std::vector<double> foundCosts;
   const size_t k = params.pricingMaxColsPerIter;
 
   // Min-heap of (cost, pool_index): keeps the k best candidates seen so far.
@@ -568,11 +627,10 @@ int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
   }
 
   while (!heap.empty()) {
-    auto [cost, i] = heap.top();
+    size_t i = heap.top().second;
     heap.pop();
     add_column(cenv, pool[i]);
     nPoolCols++;
-    if (params.is_verbose(2)) foundCosts.push_back(cost);
   }
 
   if (isRoot) {
@@ -584,11 +642,6 @@ int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
     stats.otherNodesNColsPool += nPoolCols;
     stats.otherNodesTimePool += get_elapsed_time(startTime);
   }
-  if (params.is_verbose(2)) {
-    log << "  pricing [pool]: found=" << nPoolCols;
-    for (double cost : foundCosts) log << ", cost=" << cost;
-    log << ", time=" << get_elapsed_time(startTime) << std::endl;
-  }
   return nPoolCols;
 }
 
@@ -597,7 +650,6 @@ int LP::pricing_greedy(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
   if (!enabled) return 0;
   auto startTime = std::chrono::high_resolution_clock::now();
   size_t nHeurCols = 0;
-  std::vector<double> foundCosts;
   const size_t k = params.pricingMaxColsPerIter;
 
   // Min-heap of Column by cost: keeps the k best candidates seen so far.
@@ -620,7 +672,6 @@ int LP::pricing_greedy(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
     heap.pop();
     add_column(cenv, col);
     nHeurCols++;
-    if (params.is_verbose(2)) foundCosts.push_back(col.cost);
   }
 
   if (isRoot) {
@@ -632,11 +683,6 @@ int LP::pricing_greedy(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
     stats.otherNodesNColsHeur += nHeurCols;
     stats.otherNodesTimeHeur += get_elapsed_time(startTime);
   }
-  if (params.is_verbose(2)) {
-    log << "  pricing [greedy]: found=" << nHeurCols;
-    for (double cost : foundCosts) log << ", cost=" << cost;
-    log << ", time=" << get_elapsed_time(startTime) << std::endl;
-  }
   return nHeurCols;
 }
 
@@ -646,13 +692,11 @@ int LP::pricing_P_Q_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
   if (!enabled) return 0;
   auto startTime = std::chrono::high_resolution_clock::now();
   size_t nMwis1Cols = 0;
-  std::vector<double> foundCosts;
   auto res = penv.mwis_P_Q_solve(dualsP, dualsQ);
   for (auto& [stab, priState] : res) {
     if (priState == PRICING_STABLE_FOUND) {
       add_column(cenv, stab);
       nMwis1Cols++;
-      if (params.is_verbose(2)) foundCosts.push_back(stab.cost);
     }
   }
   if (isRoot) {
@@ -663,11 +707,6 @@ int LP::pricing_P_Q_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
     stats.otherNodesNCallsMwis1++;
     stats.otherNodesNColsMwis1 += nMwis1Cols;
     stats.otherNodesTimeMwis1 += get_elapsed_time(startTime);
-  }
-  if (params.is_verbose(2)) {
-    log << "  pricing [P,Q-MWSS]: found=" << nMwis1Cols;
-    for (double cost : foundCosts) log << ", cost=" << cost;
-    log << ", time=" << get_elapsed_time(startTime) << std::endl;
   }
   return nMwis1Cols;
 }
@@ -695,11 +734,6 @@ int LP::pricing_P_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
     stats.otherNodesNCallsMwis2++;
     stats.otherNodesNColsMwis2 += (ret == 1) ? 1 : 0;
     stats.otherNodesTimeMwis2 += get_elapsed_time(startTime);
-  }
-  if (params.is_verbose(2)) {
-    log << "  pricing [P-MWSS]: found=" << (ret == 1 ? 1 : 0);
-    if (ret == 1) log << ", cost=" << res.first.cost;
-    log << ", time=" << get_elapsed_time(startTime) << std::endl;
   }
   return ret;
 }
@@ -730,11 +764,6 @@ int LP::pricing_exact(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
     stats.otherNodesNCallsExact++;
     stats.otherNodesNColsExact += (ret == 1) ? 1 : 0;
     stats.otherNodesTimeExact += get_elapsed_time(startTime);
-  }
-  if (params.is_verbose(2)) {
-    log << "  pricing [exact]: found=" << (ret == 1 ? 1 : 0);
-    if (ret == 1) log << ", cost=" << res.first.cost;
-    log << ", time=" << get_elapsed_time(startTime) << std::endl;
   }
   return ret;
 }

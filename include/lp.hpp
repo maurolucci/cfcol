@@ -68,6 +68,22 @@ class LP {
 
   Col coloring;  // Feasible coloring for the current node
 
+  struct PricingSummary {
+    size_t colsPool = 0;
+    size_t colsGreedy = 0;
+    size_t colsPQmwss = 0;
+    size_t colsPmwss = 0;
+    size_t colsExact = 0;
+    double timePool = 0.0;
+    double timeGreedy = 0.0;
+    double timePQmwss = 0.0;
+    double timePmwss = 0.0;
+    double timeExact = 0.0;
+  };
+
+  PricingSummary pricingSummary;
+  size_t pricingIters;
+
   // Exact solve of a GCP instance
   LP_STATE gcp_solve(double timelimit, double ub);
 
