@@ -61,6 +61,8 @@ struct Params {
   //     0: no inheritance
   //     1: inherit all columns
   //     2: inherit only positive columns
+  //     3: positive columns to LP, others to pool
+  //     4: all columns to LP
   // initializationBigWeight: weight of dummy column during initialization
   int inheritColumns;
   double initializationBigWeight;
@@ -199,9 +201,13 @@ struct Params {
       case 0:
         return " (none)";
       case 1:
-        return " (all)";
+        return " (all to pool)";
       case 2:
-        return " (positive)";
+        return " (positive to pool)";
+      case 3:
+        return " (positive to LP, others to pool)";
+      case 4:
+        return " (all to LP)";
       default:
         return " (unknown)";
     }
@@ -278,7 +284,8 @@ struct Params {
     out << "Branching variable: " << branchingVariable
         << get_branching_name(branchingVariable) << std::endl;
     out << "Pricing greedy max columns: " << pricingHeur1MaxNCols << std::endl;
-    out << "Pricing max columns per iter: " << pricingMaxColsPerIter << std::endl;
+    out << "Pricing max columns per iter: " << pricingMaxColsPerIter
+        << std::endl;
     out << "Pricing heuristic 1 alpha: " << pricingHeur1Alpha << std::endl;
     out << "Pricing exact time limit: " << pricingExactTimeLimit << " seconds"
         << std::endl;

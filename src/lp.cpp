@@ -1049,6 +1049,13 @@ std::vector<LP> LP::branch() {
       poolLeft = translate_columns(nonPositiveIndices, mapLeft, dpcpLeft);
       lateRight = translate_columns(posVars, mapRight, dpcpRight);
       poolRight = translate_columns(nonPositiveIndices, mapRight, dpcpRight);
+    } else if (params.inheritColumns == 4) {
+      // Mode 4: all columns go directly to LP, pool remains empty
+      std::vector<size_t> allIndices;
+      allIndices.reserve(stables.size());
+      for (size_t i = 0; i < stables.size(); ++i) allIndices.push_back(i);
+      lateLeft = translate_columns(allIndices, mapLeft, dpcpLeft);
+      lateRight = translate_columns(allIndices, mapRight, dpcpRight);
     } else {
       // Modes 1, 2: columns go to pool (all or positive only)
       std::vector<size_t> inheritIndices;
@@ -1063,7 +1070,7 @@ std::vector<LP> LP::branch() {
   }
 
   if (params.is_verbose(2)) {
-    if (params.inheritColumns == 3)
+    if (params.inheritColumns == 3 || params.inheritColumns == 4)
       log << "Created child pools: left(pool)=" << poolLeft.size()
           << ", left(late)=" << lateLeft.size()
           << ", right(pool)=" << poolRight.size()
@@ -1079,7 +1086,7 @@ std::vector<LP> LP::branch() {
   LP lpLeft(dpcpLeft, poolLeft, origDpcp, params, stats, log);
   LP lpRight(dpcpRight, poolRight, origDpcp, params, stats, log);
 
-  if (params.inheritColumns == 3) {
+  if (params.inheritColumns == 3 || params.inheritColumns == 4) {
     lpLeft.lateColumns = lateLeft;
     lpRight.lateColumns = lateRight;
   }

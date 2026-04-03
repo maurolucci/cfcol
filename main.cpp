@@ -115,7 +115,7 @@ int main(int argc, const char** argv) {
       "inherit-cols", po::value<int>()->default_value(3),
       "type of column inheritance from parent (0: no inheritance, 1: inherit "
       "all columns, 2: inherit only positive columns, 3: positive columns to "
-      "LP, others to pool)");
+      "LP, others to pool, 4: all columns to LP)");
   desc.add_options()("dummy-weight", po::value<double>()->default_value(1000.0),
                      "weight of dummy column during initialization");
   desc.add_options()("preproc-off", "do not preprocess the input graph");
@@ -185,8 +185,8 @@ int main(int argc, const char** argv) {
   params.feasibilityOtherNodes = vm["feas-nodes"].as<int>();
   params.feasibilityOtherNodesTimeLimit = vm["feas-nodes-time"].as<int>();
   params.inheritColumns = vm["inherit-cols"].as<int>();
-  if (params.inheritColumns < 0 || params.inheritColumns > 3) {
-    std::cerr << "inherit-cols must be an integer in [0, 3]" << std::endl;
+  if (params.inheritColumns < 0 || params.inheritColumns > 4) {
+    std::cerr << "inherit-cols must be an integer in [0, 4]" << std::endl;
     return 2;
   }
   params.initializationBigWeight = vm["dummy-weight"].as<double>();
