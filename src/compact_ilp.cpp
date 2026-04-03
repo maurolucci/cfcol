@@ -13,20 +13,21 @@
 Stats solve_ilp(DPCPInst& dpcp, const Params& params, std::ostream& log,
                 std::ostream& debugLog, Col& col) {
   Stats stats;
+  HeurStats heurStats;
 
   // Try to find an initial coloring with the heuristic
   Col initialCol;
   if (params.heuristicRootNode == 1)
-    stats = dpcp_1_step_greedy_heur(dpcp, initialCol);
+    heurStats = dpcp_1_step_greedy_heur(dpcp, initialCol);
   else if (params.heuristicRootNode == 2)
-    stats = dpcp_2_step_greedy_heur(dpcp, initialCol, params);
+    heurStats = dpcp_2_step_greedy_heur(dpcp, initialCol, params);
   else if (params.heuristicRootNode == 3)
-    stats = dpcp_2_step_semigreedy_heur(dpcp, initialCol, params);
+    heurStats = dpcp_2_step_semigreedy_heur(dpcp, initialCol, params);
 
   // Save initial solution stats
   if (params.heuristicRootNode >= 1 && params.heuristicRootNode <= 4) {
     stats.rootub = initialCol.get_n_colors();
-    stats.rootHeurTime = stats.time;
+    stats.rootHeurTime = heurStats.totalTime;
   }
 
   // Number of colors
