@@ -24,12 +24,12 @@ struct NullBuffer : std::streambuf {
 
 // Output directories, initially empty
 std::map<std::string, fs::path> outDirs = {
-    {"log", fs::path()},   // Directory for log file
-  {"debug", fs::path()}, // Directory for debug log file
-    {"stat", fs::path()},  // Directory for stats file
-    {"sol", fs::path()},   // Directory for solution file
-    {"col", fs::path()},   // Directory for column generation log file
-    {"iter", fs::path()}   // Directory for iteration log file for semigreedy
+    {"log", fs::path()},    // Directory for log file
+    {"debug", fs::path()},  // Directory for debug log file
+    {"stat", fs::path()},   // Directory for stats file
+    {"sol", fs::path()},    // Directory for solution file
+    {"col", fs::path()},    // Directory for column generation log file
+    {"iter", fs::path()}    // Directory for iteration log file for semigreedy
 };
 
 // Output class to handle std::ostream and file streams
@@ -288,11 +288,11 @@ int main(int argc, const char** argv) {
       }
 
       // Prepare log and col output files
-      Output out = (vm.count("out")) ? Output(outDirs["log"].string(),
-                                              outDirs["debug"].string(),
-                                              outDirs["col"].string(),
-                                              outDirs["iter"].string())
-                                     : Output();
+      Output out =
+          (vm.count("out"))
+              ? Output(outDirs["log"].string(), outDirs["debug"].string(),
+                       outDirs["col"].string(), outDirs["iter"].string())
+              : Output();
       std::ostream& lowLog = params.is_verbose(1) ? out.logFile : nullstream;
       std::ostream& debugLog = params.is_verbose(2) ? out.debugFile : lowLog;
 

@@ -63,7 +63,15 @@ Stats BP::solve(DPCPInst dpcp) {
   nextNodeId = 0;
 
   DPCPInst origDpcp(dpcp);
+    log << "Original DPCP instance: |V|=" << num_vertices(origDpcp.get_graph())
+      << ", |E|=" << num_edges(origDpcp.get_graph())
+      << ", |P|=" << origDpcp.get_nP() << ", |Q|=" << origDpcp.get_nQ()
+      << std::endl;
   if (params.preprocessing) dpcp.preprocess(true);
+    log << "After preprocessing: |V|=" << num_vertices(dpcp.get_graph())
+      << ", |E|=" << num_edges(dpcp.get_graph())
+      << ", |P|=" << dpcp.get_nP() << ", |Q|=" << dpcp.get_nQ()
+      << std::endl;
   Pool pool;
   LP rootLp(std::move(dpcp), std::move(pool), origDpcp, params, stats, log,
             debugLog, true);

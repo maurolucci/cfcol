@@ -88,15 +88,6 @@ LP_STATE LP::solve(double timelimit, double ub) {
   coloring.reset_coloring();
   state = LP_UNSOLVED;
 
-  if (params.is_verbose(2)) {
-    debugLog << "LP solve start: root=" << (isRoot ? "yes" : "no")
-             << ", |V|=" << num_vertices(dpcp.get_graph())
-             << ", |E|=" << num_edges(dpcp.get_graph())
-             << ", |P|=" << dpcp.get_nP() << ", |Q|=" << dpcp.get_nQ()
-             << ", timelimit=" << timelimit << ", ub=" << ub
-             << ", |Pool|=" << pool.size() << std::endl;
-  }
-
   // Infeasibility check
   if (dpcp.is_infeasible_instance()) {
     stats.ninfeasPrepro++;
@@ -159,7 +150,9 @@ LP_STATE LP::solve(double timelimit, double ub) {
 
   if (params.is_verbose(2)) {
     debugLog << "LP initialized with " << stables.size() << " columns ("
-             << lateColumns.size() << " late)." << std::endl;
+             << lateColumns.size() << " late), using "
+             << (initializedWithDummy ? "dummy column" : "initial solution")
+             << "." << std::endl;
   }
 
   // Initialize arrays for dual values
@@ -1047,6 +1040,13 @@ void LP::branch(std::vector<LP>& sons) {
   assert(itLeftBranch != mapLeft.end());
   dpcpLeft.preselect_vertex(itLeftBranch->second);
   if (params.preprocessing) dpcpLeft.preprocess();
+  if (params.is_verbose(2)) {
+    debugLog << "Left child after preprocessing: |V|="
+             << num_vertices(dpcpLeft.get_graph())
+             << ", |E|=" << num_edges(dpcpLeft.get_graph())
+             << ", |P|=" << dpcpLeft.get_nP() << ", |Q|=" << dpcpLeft.get_nQ()
+             << std::endl;
+  }
 
   // *******
   // ** Right branch: v is forbidden
@@ -1069,6 +1069,13 @@ void LP::branch(std::vector<LP>& sons) {
   assert(itRightBranch != mapRight.end());
   dpcpRight.forbid_vertex(itRightBranch->second);
   if (params.preprocessing) dpcpRight.preprocess();
+  if (params.is_verbose(2)) {
+    debugLog << "Right child after preprocessing: |V|="
+             << num_vertices(dpcpRight.get_graph())
+             << ", |E|=" << num_edges(dpcpRight.get_graph())
+             << ", |P|=" << dpcpRight.get_nP() << ", |Q|=" << dpcpRight.get_nQ()
+             << std::endl;
+  }
 
   // *******
   // ** Helper lambda to translate columns to a branch
