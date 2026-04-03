@@ -507,34 +507,51 @@ int LP::pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
       break;
   }
 
+  // Helper lambda: log which method found columns, with their reduced costs
+  auto log_pricing = [&](const std::string& method, int nCols) {
+    if (!params.is_verbose(2) || nCols <= 0) return;
+    log << "  Pricing [" << method << "]: " << nCols << " col(s) found, rc:";
+    for (size_t k = stables.size() - nCols; k < stables.size(); ++k)
+      log << " " << stables[k].cost - 1.0;
+    log << std::endl;
+  };
+
   // First, look for entering columns in the pool
   addedCols = pricing_pool(cenv, dualsP, dualsQ);
+  log_pricing("pool", addedCols);
   if (addedCols > 0) return addedCols;
 
   // Second, look for entering columns with a greedy heuristic
   addedCols = pricing_greedy(cenv, penv, dualsP, dualsQ, useGreedy);
+  log_pricing("greedy", addedCols);
   if (addedCols > 0) return addedCols;
 
   if (pricingOrder == 1) {
     // Third, P,Q-MWSSP heuristic
     addedCols = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, usePQmwss);
+    log_pricing("P,Q-MWSS", addedCols);
     if (addedCols > 0) return addedCols;
 
     // Fourth, P-MWSSP heuristic
     addedCols = pricing_P_mwss(cenv, penv, dualsP, dualsQ, usePmwss);
+    log_pricing("P-MWSS", addedCols);
     if (addedCols >= 0) return addedCols;
   } else {
     // Third, P-MWSSP heuristic
     addedCols = pricing_P_mwss(cenv, penv, dualsP, dualsQ, usePmwss);
+    log_pricing("P-MWSS", addedCols);
     if (addedCols >= 0) return addedCols;
 
     // Fourth, P,Q-MWSSP heuristic
     addedCols = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, usePQmwss);
+    log_pricing("P,Q-MWSS", addedCols);
     if (addedCols > 0) return addedCols;
   }
 
   // Fifth, exact resolution of pricing
-  return pricing_exact(cenv, penv, dualsP, dualsQ);
+  addedCols = pricing_exact(cenv, penv, dualsP, dualsQ);
+  log_pricing("exact", addedCols);
+  return addedCols;
 }
 
 int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
