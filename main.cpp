@@ -233,7 +233,7 @@ int main(int argc, const char** argv) {
     // Read DPCP instance
     Graph graph;
     Partition P, Q;
-    std::tie(graph, P, Q) = read_dpcp_instance(inGraph, inPartP, inPartQ);
+    read_dpcp_instance(inGraph, inPartP, inPartQ, graph, P, Q);
     size_t nP = P.size();
     size_t nQ = Q.size();
 

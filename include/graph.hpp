@@ -33,9 +33,9 @@ void graph_copy(const Graph& src, const VertexMap<size_t>& vertex2CurrentId,
                 Graph& dst);
 void graph_copy(const Graph& src, Graph& dst);
 
-std::tuple<Graph, Partition, Partition> read_dpcp_instance(std::istream& graph,
-                                                           std::istream& partP,
-                                                           std::istream& partQ);
+void read_dpcp_instance(std::istream& graphStream, std::istream& partP,
+                        std::istream& partQ, Graph& graph, Partition& P,
+                        Partition& Q);
 
 class DPCPInst {
  public:

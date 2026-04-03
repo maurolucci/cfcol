@@ -22,24 +22,27 @@ void graph_copy(const Graph& src, Graph& dst) {
   graph_copy(src, vertex2CurrentId, dst);
 }
 
-std::tuple<Graph, Partition, Partition> read_dpcp_instance(
-    std::istream& graph, std::istream& partP, std::istream& partQ) {
-  Graph g;
+void read_dpcp_instance(std::istream& graphStream, std::istream& partP,
+                        std::istream& partQ, Graph& graph, Partition& P,
+                        Partition& Q) {
+  graph.clear();
+  P.clear();
+  Q.clear();
+
   size_t n, m, nP, nQ;
   size_t u, v;
   size_t pi, qj, nPi, nQj;
   char c;
-  Partition P, Q;
 
-  graph >> n >> c >> m;
+  graphStream >> n >> c >> m;
 
   for (size_t i = 0; i < n; ++i) {
-    add_vertex(VertexInfo{i}, g);
+    add_vertex(VertexInfo{i}, graph);
   }
 
   for (size_t i = 0; i < m; ++i) {
-    graph >> u >> v;
-    add_edge(vertex(u, g), vertex(v, g), g);
+    graphStream >> u >> v;
+    add_edge(vertex(u, graph), vertex(v, graph), graph);
   }
 
   partP >> n >> c >> nP;
@@ -48,7 +51,7 @@ std::tuple<Graph, Partition, Partition> read_dpcp_instance(
     partP >> pi >> nPi;
     for (size_t j = 0; j < nPi; ++j) {
       partP >> v;
-      P[pi].push_back(vertex(v, g));
+      P[pi].push_back(vertex(v, graph));
     }
   }
   partQ >> n >> c >> nQ;
@@ -57,11 +60,9 @@ std::tuple<Graph, Partition, Partition> read_dpcp_instance(
     partQ >> qj >> nQj;
     for (size_t k = 0; k < nQj; ++k) {
       partQ >> v;
-      Q[qj].push_back(vertex(v, g));
+      Q[qj].push_back(vertex(v, graph));
     }
   }
-
-  return std::make_tuple(std::move(g), std::move(P), std::move(Q));
 }
 
 DPCPInst::DPCPInst(const Graph& graph, const Partition& P, const Partition& Q)
