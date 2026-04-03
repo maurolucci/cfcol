@@ -187,7 +187,7 @@ LP_STATE BP::push(Node node) {
       return state;  // Prune by infeasibility or mem/time limit
   }
 
-  if (params.dfs) {
+  if (params.use_dfs_tree_search()) {
     L.push_back(std::move(node));
     return LP_FRACTIONAL;
   }
@@ -215,7 +215,7 @@ void BP::pop() { L.pop_back(); }
 void BP::update_primal_bound(double obj_value) {
   primal_bound = obj_value;
 
-  if (params.dfs) {
+  if (params.use_dfs_tree_search()) {
     for (auto it = L.begin(); it != L.end();) {
       const double node_obj_value = it->get_obj_value();
       if (node_obj_value >= primal_bound)
@@ -239,7 +239,7 @@ void BP::update_primal_bound(double obj_value) {
 double BP::calculate_dual_bound() {
   double dual_bound = DBL_MAX;
   if (!L.empty()) {
-    if (params.dfs) {
+    if (params.use_dfs_tree_search()) {
       for (auto it = L.begin(); it != L.end(); ++it)
         if (it->get_obj_value() < dual_bound) dual_bound = it->get_obj_value();
     } else {

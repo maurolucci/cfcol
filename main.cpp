@@ -78,7 +78,9 @@ int main(int argc, const char** argv) {
       "verbosity level (0: quiet, 1: low logging, 2: detailed logging)");
   desc.add_options()("repeat,n", po::value<size_t>()->default_value(1),
                      "number of experiment repetitions");
-  desc.add_options()("dfs", "use depth-first strategy in the B&P tree");
+  desc.add_options()(
+      "tree-search", po::value<int>()->default_value(1),
+      "tree search strategy in B&P (1: best-bound, 2: dfs)");
   desc.add_options()("relax", "solve only the root node");
   desc.add_options()("ub", po::value<double>()->default_value(DBL_MAX),
                      "initial upper bound on the optimal solution value");
@@ -131,8 +133,9 @@ int main(int argc, const char** argv) {
   desc.add_options()("pricing-exact-time",
                      po::value<size_t>()->default_value(300),
                      "time limit for exact pricing (in seconds)");
-  desc.add_options()("branching-fms",
-                     "use Furini-Malaguti-Santini branching rule");
+  desc.add_options()(
+      "branching-variable", po::value<int>()->default_value(1),
+      "branching variable rule (1: FMS, 2: LNTT)");
 
   po::positional_options_description pos;
   pos.add("graph", -1);
@@ -163,7 +166,11 @@ int main(int argc, const char** argv) {
     std::cerr << "verbose must be an integer in [0, 2]" << std::endl;
     return 2;
   }
-  params.dfs = vm.count("dfs");
+  params.treeSearch = vm["tree-search"].as<int>();
+  if (params.treeSearch < 1 || params.treeSearch > 2) {
+    std::cerr << "tree-search must be an integer in [1, 2]" << std::endl;
+    return 2;
+  }
   params.onlyRelaxation = vm.count("relax");
   params.heuristicRootNode = vm["heur-root"].as<int>();
   params.heuristicOtherNodes = vm["heur-nodes"].as<int>();
@@ -185,7 +192,12 @@ int main(int argc, const char** argv) {
   params.pricingHeur1MaxNCols = vm["pricing-greedy-max-cols"].as<size_t>();
   params.pricingHeur1Alpha = vm["pricing-greedy-alpha"].as<double>();
   params.pricingExactTimeLimit = vm["pricing-exact-time"].as<size_t>();
-  params.branchingFMS = vm.count("branching-fms");
+  params.branchingVariable = vm["branching-variable"].as<int>();
+  if (params.branchingVariable < 1 || params.branchingVariable > 2) {
+    std::cerr << "branching-variable must be an integer in [1, 2]"
+              << std::endl;
+    return 2;
+  }
 
   // Parse input files
   std::vector<std::string> inputs;

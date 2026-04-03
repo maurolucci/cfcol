@@ -6,11 +6,13 @@
 struct Params {
   // General options
   // timeLimit: overall time limit for the algorithm (in seconds)
-  // dfs: use depth-first strategy in the B&P tree
+  // treeSearch: tree search strategy in B&P
+  //   1: best bound
+  //   2: depth-first search
   // onlyRelaxation: solve only the root node
   // verbose: verbosity level (0: quiet, 1: low, 2: detailed)
   size_t timeLimit;
-  bool dfs;
+  int treeSearch;
   bool onlyRelaxation;
   int verbose;
 
@@ -84,12 +86,14 @@ struct Params {
   double pricingHeur1Alpha;
   size_t pricingHeur1MaxNCols;
   size_t pricingExactTimeLimit;
-  // branchingFMS: use Furini-Malaguti-Santini branching rule
-  bool branchingFMS;
+  // branchingVariable: branching variable rule
+  //   1: Furini-Malaguti-Santini (FMS)
+  //   2: Lucci-Nasini-Tolomei-Torres (LNTT)
+  int branchingVariable;
 
   Params()
       : timeLimit(900),
-        dfs(false),
+        treeSearch(1),
         onlyRelaxation(false),
         verbose(0),
         heuristicRootNode(3),
@@ -108,10 +112,16 @@ struct Params {
         pricingHeur1Alpha(0.1),
         pricingHeur1MaxNCols(1),
         pricingExactTimeLimit(300),
-        branchingFMS(false) {};
+        branchingVariable(1) {};
 
   [[nodiscard]] bool is_verbose(int level = 1) const {
     return verbose >= level;
+  }
+
+  [[nodiscard]] bool use_dfs_tree_search() const { return treeSearch == 2; }
+
+  [[nodiscard]] bool use_fms_branching() const {
+    return branchingVariable == 1;
   }
 
   std::string get_pricing_method_name(int method) {
@@ -193,10 +203,33 @@ struct Params {
     }
   };
 
+  std::string get_tree_search_name(int tree) {
+    switch (tree) {
+      case 1:
+        return " (best-bound)";
+      case 2:
+        return " (dfs)";
+      default:
+        return " (unknown)";
+    }
+  };
+
+  std::string get_branching_name(int branching) {
+    switch (branching) {
+      case 1:
+        return " (fms)";
+      case 2:
+        return " (lntt)";
+      default:
+        return " (unknown)";
+    }
+  };
+
   void print_params(std::ostream& out) {
     out << "*** Parameters ***:" << std::endl;
     out << "Time limit: " << timeLimit << " seconds" << std::endl;
-    out << "DFS strategy: " << (dfs ? "enabled" : "disabled") << std::endl;
+    out << "Tree search: " << treeSearch << get_tree_search_name(treeSearch)
+        << std::endl;
     out << "Only relaxation: " << (onlyRelaxation ? "enabled" : "disabled")
         << std::endl;
     out << "Verbose level: " << verbose << std::endl;
@@ -234,10 +267,12 @@ struct Params {
         << get_inherit_name(inheritColumns) << std::endl;
     out << "Initialization big weight: " << initializationBigWeight
         << std::endl;
-    out << "Preprocessing: "
-        << (preprocessing ? "enabled" : "disabled") << std::endl;
+    out << "Preprocessing: " << (preprocessing ? "enabled" : "disabled")
+        << std::endl;
     out << "Pricing method: " << pricingMethod
         << get_pricing_method_name(pricingMethod) << std::endl;
+    out << "Branching variable: " << branchingVariable
+        << get_branching_name(branchingVariable) << std::endl;
     out << "Pricing greedy max columns: " << pricingHeur1MaxNCols << std::endl;
     out << "Pricing heuristic 1 alpha: " << pricingHeur1Alpha << std::endl;
     out << "Pricing exact time limit: " << pricingExactTimeLimit << " seconds"

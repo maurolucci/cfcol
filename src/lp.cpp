@@ -229,7 +229,7 @@ LP_STATE LP::solve(double timelimit, double ub) {
 
       if (state == LP_FRACTIONAL) {
         // Find branching variable
-        branchingVertex = params.branchingFMS
+        branchingVertex = params.use_fms_branching()
                               ? get_branching_variable_FMS(values)
                               : get_branching_variable_LNTT(values);
       } else if (state == LP_INTEGER) {
