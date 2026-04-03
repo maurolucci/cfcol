@@ -192,27 +192,9 @@ LP_STATE LP::solve(double timelimit, double ub) {
     }
   }
 
-  if (params.is_verbose(2)) {
-    size_t totalCols = pricingSummary.colsPool + pricingSummary.colsGreedy +
-                       pricingSummary.colsPQmwss + pricingSummary.colsPmwss +
-                       pricingSummary.colsExact;
-    double totalTime = pricingSummary.timePool + pricingSummary.timeGreedy +
-                       pricingSummary.timePQmwss + pricingSummary.timePmwss +
-                       pricingSummary.timeExact;
-    log << "pricing summary: iters=" << pricingIters
-        << ", total_cols=" << totalCols << ", total_time=" << totalTime
-        << std::endl;
-    log << "  pool: cols=" << pricingSummary.colsPool
-        << ", time=" << pricingSummary.timePool << std::endl;
-    log << "  greedy: cols=" << pricingSummary.colsGreedy
-        << ", time=" << pricingSummary.timeGreedy << std::endl;
-    log << "  P,Q-MWSS: cols=" << pricingSummary.colsPQmwss
-        << ", time=" << pricingSummary.timePQmwss << std::endl;
-    log << "  P-MWSS: cols=" << pricingSummary.colsPmwss
-        << ", time=" << pricingSummary.timePmwss << std::endl;
-    log << "  exact: cols=" << pricingSummary.colsExact
-        << ", time=" << pricingSummary.timeExact << std::endl;
-  }
+  // Update global stats once using the accumulated pricing summary.
+  update_stats_from_pricing_summary();
+  log_pricing_summary();
 
   // Save root lower bound
   if (isRoot) {
@@ -489,42 +471,6 @@ void LP::add_initial_columns(CplexEnv& cenv) {
 
 int LP::pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
                 IloNumArray& dualsQ) {
-  auto run_pool = [&]() {
-    auto t0 = std::chrono::high_resolution_clock::now();
-    int ret = pricing_pool(cenv, dualsP, dualsQ);
-    pricingSummary.timePool += get_elapsed_time(t0);
-    if (ret > 0) pricingSummary.colsPool += static_cast<size_t>(ret);
-    return ret;
-  };
-  auto run_greedy = [&](bool enabled) {
-    auto t0 = std::chrono::high_resolution_clock::now();
-    int ret = pricing_greedy(cenv, penv, dualsP, dualsQ, enabled);
-    pricingSummary.timeGreedy += get_elapsed_time(t0);
-    if (ret > 0) pricingSummary.colsGreedy += static_cast<size_t>(ret);
-    return ret;
-  };
-  auto run_pqmwss = [&](bool enabled) {
-    auto t0 = std::chrono::high_resolution_clock::now();
-    int ret = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, enabled);
-    pricingSummary.timePQmwss += get_elapsed_time(t0);
-    if (ret > 0) pricingSummary.colsPQmwss += static_cast<size_t>(ret);
-    return ret;
-  };
-  auto run_pmwss = [&](bool enabled) {
-    auto t0 = std::chrono::high_resolution_clock::now();
-    int ret = pricing_P_mwss(cenv, penv, dualsP, dualsQ, enabled);
-    pricingSummary.timePmwss += get_elapsed_time(t0);
-    if (ret > 0) pricingSummary.colsPmwss += static_cast<size_t>(ret);
-    return ret;
-  };
-  auto run_exact = [&]() {
-    auto t0 = std::chrono::high_resolution_clock::now();
-    int ret = pricing_exact(cenv, penv, dualsP, dualsQ);
-    pricingSummary.timeExact += get_elapsed_time(t0);
-    if (ret > 0) pricingSummary.colsExact += static_cast<size_t>(ret);
-    return ret;
-  };
-
   int addedCols = 0;
   bool useGreedy = false;
   bool usePQmwss = false;
@@ -575,33 +521,106 @@ int LP::pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
   }
 
   // First, look for entering columns in the pool
-  addedCols = run_pool();
+  addedCols = pricing_pool(cenv, dualsP, dualsQ);
   if (addedCols > 0) return addedCols;
 
   // Second, look for entering columns with a greedy heuristic
-  addedCols = run_greedy(useGreedy);
+  addedCols = pricing_greedy(cenv, penv, dualsP, dualsQ, useGreedy);
   if (addedCols > 0) return addedCols;
 
   if (pricingOrder == 1) {
     // Third, P,Q-MWSSP heuristic
-    addedCols = run_pqmwss(usePQmwss);
+    addedCols = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, usePQmwss);
     if (addedCols > 0) return addedCols;
 
     // Fourth, P-MWSSP heuristic
-    addedCols = run_pmwss(usePmwss);
+    addedCols = pricing_P_mwss(cenv, penv, dualsP, dualsQ, usePmwss);
     if (addedCols >= 0) return addedCols;
   } else {
     // Third, P-MWSSP heuristic
-    addedCols = run_pmwss(usePmwss);
+    addedCols = pricing_P_mwss(cenv, penv, dualsP, dualsQ, usePmwss);
     if (addedCols >= 0) return addedCols;
 
     // Fourth, P,Q-MWSSP heuristic
-    addedCols = run_pqmwss(usePQmwss);
+    addedCols = pricing_P_Q_mwss(cenv, penv, dualsP, dualsQ, usePQmwss);
     if (addedCols > 0) return addedCols;
   }
 
   // Fifth, exact resolution of pricing
-  return run_exact();
+  return pricing_exact(cenv, penv, dualsP, dualsQ);
+}
+
+void LP::update_stats_from_pricing_summary() {
+  if (isRoot) {
+    stats.rootNCallsPool += static_cast<int>(pricingSummary.callsPool);
+    stats.rootNCallsHeur += static_cast<int>(pricingSummary.callsGreedy);
+    stats.rootNCallsMwis1 += static_cast<int>(pricingSummary.callsPQmwss);
+    stats.rootNCallsMwis2 += static_cast<int>(pricingSummary.callsPmwss);
+    stats.rootNCallsExact += static_cast<int>(pricingSummary.callsExact);
+
+    stats.rootNColsPool += static_cast<int>(pricingSummary.colsPool);
+    stats.rootNColsHeur += static_cast<int>(pricingSummary.colsGreedy);
+    stats.rootNColsMwis1 += static_cast<int>(pricingSummary.colsPQmwss);
+    stats.rootNColsMwis2 += static_cast<int>(pricingSummary.colsPmwss);
+    stats.rootNColsExact += static_cast<int>(pricingSummary.colsExact);
+
+    stats.rootTimePool += pricingSummary.timePool;
+    stats.rootTimeHeur += pricingSummary.timeGreedy;
+    stats.rootTimeMwis1 += pricingSummary.timePQmwss;
+    stats.rootTimeMwis2 += pricingSummary.timePmwss;
+    stats.rootTimeExact += pricingSummary.timeExact;
+  } else {
+    stats.otherNodesNCallsPool += static_cast<int>(pricingSummary.callsPool);
+    stats.otherNodesNCallsHeur += static_cast<int>(pricingSummary.callsGreedy);
+    stats.otherNodesNCallsMwis1 += static_cast<int>(pricingSummary.callsPQmwss);
+    stats.otherNodesNCallsMwis2 += static_cast<int>(pricingSummary.callsPmwss);
+    stats.otherNodesNCallsExact += static_cast<int>(pricingSummary.callsExact);
+
+    stats.otherNodesNColsPool += static_cast<int>(pricingSummary.colsPool);
+    stats.otherNodesNColsHeur += static_cast<int>(pricingSummary.colsGreedy);
+    stats.otherNodesNColsMwis1 += static_cast<int>(pricingSummary.colsPQmwss);
+    stats.otherNodesNColsMwis2 += static_cast<int>(pricingSummary.colsPmwss);
+    stats.otherNodesNColsExact += static_cast<int>(pricingSummary.colsExact);
+
+    stats.otherNodesTimePool += pricingSummary.timePool;
+    stats.otherNodesTimeHeur += pricingSummary.timeGreedy;
+    stats.otherNodesTimeMwis1 += pricingSummary.timePQmwss;
+    stats.otherNodesTimeMwis2 += pricingSummary.timePmwss;
+    stats.otherNodesTimeExact += pricingSummary.timeExact;
+  }
+}
+
+void LP::log_pricing_summary() const {
+  if (!params.is_verbose(2)) return;
+
+  size_t totalCalls = pricingSummary.callsPool + pricingSummary.callsGreedy +
+                      pricingSummary.callsPQmwss + pricingSummary.callsPmwss +
+                      pricingSummary.callsExact;
+  size_t totalCols = pricingSummary.colsPool + pricingSummary.colsGreedy +
+                     pricingSummary.colsPQmwss + pricingSummary.colsPmwss +
+                     pricingSummary.colsExact;
+  double totalTime = pricingSummary.timePool + pricingSummary.timeGreedy +
+                     pricingSummary.timePQmwss + pricingSummary.timePmwss +
+                     pricingSummary.timeExact;
+
+  log << "pricing summary: iters=" << pricingIters
+      << ", total_calls=" << totalCalls << ", total_cols=" << totalCols
+      << ", total_time=" << totalTime << std::endl;
+  log << "  pool: calls=" << pricingSummary.callsPool
+      << ", cols=" << pricingSummary.colsPool
+      << ", time=" << pricingSummary.timePool << std::endl;
+  log << "  greedy: calls=" << pricingSummary.callsGreedy
+      << ", cols=" << pricingSummary.colsGreedy
+      << ", time=" << pricingSummary.timeGreedy << std::endl;
+  log << "  P,Q-MWSS: calls=" << pricingSummary.callsPQmwss
+      << ", cols=" << pricingSummary.colsPQmwss
+      << ", time=" << pricingSummary.timePQmwss << std::endl;
+  log << "  P-MWSS: calls=" << pricingSummary.callsPmwss
+      << ", cols=" << pricingSummary.colsPmwss
+      << ", time=" << pricingSummary.timePmwss << std::endl;
+  log << "  exact: calls=" << pricingSummary.callsExact
+      << ", cols=" << pricingSummary.colsExact
+      << ", time=" << pricingSummary.timeExact << std::endl;
 }
 
 int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
@@ -614,6 +633,7 @@ int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
   using Entry = std::pair<double, size_t>;
   std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> heap;
   for (size_t i = 0; i < pool.size(); ++i) {
+    pricingSummary.callsPool++;
     double cost = 0.0;
     for (auto pi : pool[i].ps) cost += dualsP[pi];
     for (auto qj : pool[i].qs) cost -= dualsQ[qj];
@@ -633,15 +653,8 @@ int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
     nPoolCols++;
   }
 
-  if (isRoot) {
-    stats.rootNCallsPool++;
-    stats.rootNColsPool += nPoolCols;
-    stats.rootTimePool += get_elapsed_time(startTime);
-  } else {
-    stats.otherNodesNCallsPool++;
-    stats.otherNodesNColsPool += nPoolCols;
-    stats.otherNodesTimePool += get_elapsed_time(startTime);
-  }
+  pricingSummary.colsPool += nPoolCols;
+  pricingSummary.timePool += get_elapsed_time(startTime);
   return nPoolCols;
 }
 
@@ -657,6 +670,7 @@ int LP::pricing_greedy(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
   auto cmp = [](const Column& a, const Column& b) { return a.cost > b.cost; };
   std::priority_queue<Column, std::vector<Column>, decltype(cmp)> heap(cmp);
   for (size_t i = 0; i < params.pricingHeur1MaxNCols; ++i) {
+    pricingSummary.callsGreedy++;
     auto res = penv.heur_solve(dualsP, dualsQ, params.pricingHeur1Alpha);
     if (res.second != PRICING_STABLE_FOUND) continue;
     if (heap.size() < k)
@@ -674,15 +688,8 @@ int LP::pricing_greedy(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
     nHeurCols++;
   }
 
-  if (isRoot) {
-    stats.rootNCallsHeur += params.pricingHeur1MaxNCols;
-    stats.rootNColsHeur += nHeurCols;
-    stats.rootTimeHeur += get_elapsed_time(startTime);
-  } else {
-    stats.otherNodesNCallsHeur += params.pricingHeur1MaxNCols;
-    stats.otherNodesNColsHeur += nHeurCols;
-    stats.otherNodesTimeHeur += get_elapsed_time(startTime);
-  }
+  pricingSummary.colsGreedy += nHeurCols;
+  pricingSummary.timeGreedy += get_elapsed_time(startTime);
   return nHeurCols;
 }
 
@@ -690,6 +697,7 @@ int LP::pricing_greedy(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
 int LP::pricing_P_Q_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
                          IloNumArray& dualsQ, bool enabled) {
   if (!enabled) return 0;
+  pricingSummary.callsPQmwss++;
   auto startTime = std::chrono::high_resolution_clock::now();
   size_t nMwis1Cols = 0;
   auto res = penv.mwis_P_Q_solve(dualsP, dualsQ);
@@ -699,15 +707,8 @@ int LP::pricing_P_Q_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
       nMwis1Cols++;
     }
   }
-  if (isRoot) {
-    stats.rootNCallsMwis1++;
-    stats.rootNColsMwis1 += nMwis1Cols;
-    stats.rootTimeMwis1 += get_elapsed_time(startTime);
-  } else {
-    stats.otherNodesNCallsMwis1++;
-    stats.otherNodesNColsMwis1 += nMwis1Cols;
-    stats.otherNodesTimeMwis1 += get_elapsed_time(startTime);
-  }
+  pricingSummary.colsPQmwss += nMwis1Cols;
+  pricingSummary.timePQmwss += get_elapsed_time(startTime);
   return nMwis1Cols;
 }
 
@@ -715,6 +716,7 @@ int LP::pricing_P_Q_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
 int LP::pricing_P_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
                        IloNumArray& dualsQ, bool enabled) {
   if (!enabled) return -1;
+  pricingSummary.callsPmwss++;
   int ret;
   auto startTime = std::chrono::high_resolution_clock::now();
   auto res = penv.mwis_P_solve(dualsP, dualsQ);
@@ -726,20 +728,14 @@ int LP::pricing_P_mwss(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
   else
     ret = 0;  // Node solved up to optimality
 
-  if (isRoot) {
-    stats.rootNCallsMwis2++;
-    stats.rootNColsMwis2 += (ret == 1) ? 1 : 0;
-    stats.rootTimeMwis2 += get_elapsed_time(startTime);
-  } else {
-    stats.otherNodesNCallsMwis2++;
-    stats.otherNodesNColsMwis2 += (ret == 1) ? 1 : 0;
-    stats.otherNodesTimeMwis2 += get_elapsed_time(startTime);
-  }
+  pricingSummary.colsPmwss += (ret == 1) ? 1 : 0;
+  pricingSummary.timePmwss += get_elapsed_time(startTime);
   return ret;
 }
 
 int LP::pricing_exact(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
                       IloNumArray& dualsQ) {
+  pricingSummary.callsExact++;
   auto startTime = std::chrono::high_resolution_clock::now();
   int ret;
   auto res = penv.exact_solve(dualsP, dualsQ);
@@ -756,15 +752,8 @@ int LP::pricing_exact(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
   else
     ret = -3;
 
-  if (isRoot) {
-    stats.rootNCallsExact++;
-    stats.rootNColsExact += (ret == 1) ? 1 : 0;
-    stats.rootTimeExact += get_elapsed_time(startTime);
-  } else {
-    stats.otherNodesNCallsExact++;
-    stats.otherNodesNColsExact += (ret == 1) ? 1 : 0;
-    stats.otherNodesTimeExact += get_elapsed_time(startTime);
-  }
+  pricingSummary.colsExact += (ret == 1) ? 1 : 0;
+  pricingSummary.timeExact += get_elapsed_time(startTime);
   return ret;
 }
 

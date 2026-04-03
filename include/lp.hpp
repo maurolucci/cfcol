@@ -46,11 +46,12 @@ class LP {
 
  private:
   DPCPInst dpcp;  // DPCP instance at the current node
-  Pool pool;      // Pool of stable sets at the current node (inherited from the parent)
-  Pool lateColumns;  // Columns to add after initialization (mode 3)
+  Pool pool;      // Pool of stable sets at the current node (inherited from the
                   // parent)
+  Pool lateColumns;          // Columns to add after initialization (mode 3)
+                             // parent)
   const DPCPInst& origDpcp;  // Reference to the original DPCP instance
-  Params& params;      // Reference to the parameters of the algorithm
+  Params& params;            // Reference to the parameters of the algorithm
   Stats& stats;  // Reference to the stats object to update during the algorithm
   std::ostream& log;  // Reference to the log stream
 
@@ -69,6 +70,11 @@ class LP {
   Col coloring;  // Feasible coloring for the current node
 
   struct PricingSummary {
+    size_t callsPool = 0;
+    size_t callsGreedy = 0;
+    size_t callsPQmwss = 0;
+    size_t callsPmwss = 0;
+    size_t callsExact = 0;
     size_t colsPool = 0;
     size_t colsGreedy = 0;
     size_t colsPQmwss = 0;
@@ -112,6 +118,8 @@ class LP {
                      IloNumArray& dualsQ, bool enabled);
   int pricing_exact(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
                     IloNumArray& dualsQ);
+  void update_stats_from_pricing_summary();
+  void log_pricing_summary() const;
 
   // Add a new column to the linear relaxation
   void add_column(CplexEnv& cenv, Column& stab);
