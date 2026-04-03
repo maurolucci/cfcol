@@ -105,6 +105,7 @@ class LP {
   // Initialize LP
   void add_constraints_and_objective(CplexEnv& cenv);
   void add_initial_columns(CplexEnv& cenv);
+  void repair_pool(Pool& pool);
 
   // Pricing methods
   int pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,

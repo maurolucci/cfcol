@@ -94,7 +94,7 @@ int main(int argc, const char** argv) {
       "heur-2step-variant", po::value<size_t>()->default_value(4),
       "variant of the 2-step heuristic (2: DEG, 3: EDG, 4: AUTO)");
   desc.add_options()("heur-semigreedy-alpha",
-                     po::value<double>()->default_value(0.2),
+                     po::value<double>()->default_value(0.1),
                      "alpha parameter for the semi-greedy heuristic");
   desc.add_options()("heur-semigreedy-iter",
                      po::value<size_t>()->default_value(500),
@@ -331,6 +331,7 @@ int main(int argc, const char** argv) {
           lowLog << "Solving instance " << path << " with B&P" << std::endl;
         DPCPInst origDpcp(graph, P, Q);
         DPCPInst rootDpcp(origDpcp);
+        if (params.preprocessing) rootDpcp.preprocess(true);
         Pool pool;
         BP bp(params, lowLog, col, vm["ub"].as<double>());
         LP lp(std::move(rootDpcp), std::move(pool), origDpcp, params,

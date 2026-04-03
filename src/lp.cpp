@@ -61,9 +61,6 @@ LP_STATE LP::solve(double timelimit, double ub) {
         << ", ub=" << ub << ", |Pool|=" << pool.size() << std::endl;
   }
 
-  // Preprocess the instance
-  if (params.preprocessing) dpcp.preprocess(isRoot);
-
   if (params.is_verbose(2)) {
     log << "LP after preprocess: |V|=" << num_vertices(dpcp.get_graph())
         << ", |E|=" << num_edges(dpcp.get_graph()) << ", |P|=" << dpcp.get_nP()
@@ -156,7 +153,7 @@ LP_STATE LP::solve(double timelimit, double ub) {
     // CPLEX optimization
     cplex.solve();
 
-    // Handle errores
+    // Handle errors
     IloCplex::CplexStatus status = cplex.getCplexStatus();
     if (status == IloCplex::AbortTimeLim) {
       state = LP_TIME_EXCEEDED;
@@ -1012,6 +1009,7 @@ std::vector<LP> LP::branch() {
   auto itLeftBranch = mapLeft.find(v);
   assert(itLeftBranch != mapLeft.end());
   dpcpLeft.preselect_vertex(itLeftBranch->second);
+  if (params.preprocessing) dpcpLeft.preprocess();
 
   // *******
   // ** Right branch: v is forbidden
@@ -1034,6 +1032,7 @@ std::vector<LP> LP::branch() {
   auto itRightBranch = mapRight.find(v);
   assert(itRightBranch != mapRight.end());
   dpcpRight.forbid_vertex(itRightBranch->second);
+  if (params.preprocessing) dpcpRight.preprocess();
 
   // *******
   // ** Helper lambda to translate columns to a branch
@@ -1049,6 +1048,8 @@ std::vector<LP> LP::branch() {
         auto it = branchMap.find(u);
         if (it != branchMap.end()) {
           Vertex uBranch = it->second;
+          // uBranch may not be in the branched DPCP instance if it was removed
+          // by branching or preprocessing
           if (branchDpcp.has_vertex(uBranch))
             translatedCol.add_vertex(uBranch, branchDpcp.get_P_part(uBranch),
                                      branchDpcp.get_Q_part(uBranch));
