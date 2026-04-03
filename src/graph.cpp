@@ -228,7 +228,6 @@ void DPCPInst::preprocess(bool clique) {
 
 // Preprocess #1: Make each P-part a clique by adding missing edges.
 void DPCPInst::preprocess_step1() {
-  isGCP = true;
   for (size_t pi = 0; pi < get_nP(); ++pi) {
     for (auto it_u = P[pi].begin(); it_u != P[pi].end(); ++it_u)
       for (auto it_v = std::next(it_u); it_v != P[pi].end(); ++it_v)
