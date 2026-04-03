@@ -54,12 +54,18 @@ BP::BP(Params& params, std::ostream& log, Col& sol, double ub)
       log(log),
       stats() {}
 
-Stats BP::solve(Node root) {
+Stats BP::solve(DPCPInst dpcp) {
   start_t = ClockType::now();
   last_t = start_t;
   first_call = true;
   nextNodeId = 0;
-  root.set_id(nextNodeId++);
+
+  DPCPInst origDpcp(dpcp);
+  if (params.preprocessing) dpcp.preprocess(true);
+  Pool pool;
+  LP rootLp(std::move(dpcp), std::move(pool), origDpcp, params, stats, log,
+            true);
+  Node root(std::move(rootLp), 0, nextNodeId++);
 
   auto state_after_push = [](LP_STATE lpState) -> std::optional<STATE> {
     switch (lpState) {

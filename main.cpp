@@ -329,15 +329,9 @@ int main(int argc, const char** argv) {
       if (solver == "byp") {
         if (params.is_verbose())
           lowLog << "Solving instance " << path << " with B&P" << std::endl;
-        DPCPInst origDpcp(graph, P, Q);
-        DPCPInst rootDpcp(origDpcp);
-        if (params.preprocessing) rootDpcp.preprocess(true);
-        Pool pool;
+        DPCPInst dpcp(graph, P, Q);
         BP bp(params, lowLog, col, vm["ub"].as<double>());
-        LP lp(std::move(rootDpcp), std::move(pool), origDpcp, params,
-              bp.get_stats(), lpLog, true);
-        Node root(std::move(lp));
-        stats = bp.solve(std::move(root));
+        stats = bp.solve(std::move(dpcp));
       } else if (solver == "compact") {
         if (params.is_verbose())
           lowLog << "Solving instance " << path << " with compact ILP"
