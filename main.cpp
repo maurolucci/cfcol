@@ -237,26 +237,6 @@ int main(int argc, const char** argv) {
     size_t nP = P.size();
     size_t nQ = Q.size();
 
-    // Print P and Q
-    if (params.is_verbose(2)) {
-      std::cout << "P:" << std::endl;
-      for (size_t i = 0; i < P.size(); ++i) {
-        std::cout << "P" << i << ": ";
-        for (Vertex v : P[i]) {
-          std::cout << graph[v].id << " ";
-        }
-        std::cout << std::endl;
-      }
-      std::cout << "Q:" << std::endl;
-      for (size_t j = 0; j < Q.size(); ++j) {
-        std::cout << "Q" << j << ": ";
-        for (Vertex v : Q[j]) {
-          std::cout << graph[v].id << " ";
-        }
-        std::cout << std::endl;
-      }
-    }
-
     for (size_t run = 0; run < repetitions; ++run) {
       // Get name for the current run
       fs::path currentName(path.stem().string() + "-" + solver + "-" +
