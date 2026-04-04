@@ -359,7 +359,7 @@ HeurStats dpcp_2_step_greedy_heur(const DPCPInst& dpcp, Col& col,
 HeurStats dpcp_2_step_semigreedy_heur(const DPCPInst& dpcp, Col& col,
                                       const Params& params,
                                       std::ostream& iterFile) {
-  dpcp.check_consistency();
+  assert(dpcp.check_consistency());
   TimePoint start = ClockType::now();
   HeurStats stats;
   stats.totalIters =
@@ -656,7 +656,7 @@ bool single_step(const DPCPInst& dpcp, Col& col, bool greedy) {
 // 3-arg overload: discards iterFile output
 HeurStats dpcp_2_step_semigreedy_heur(const DPCPInst& dpcp, Col& col,
                                       const Params& params) {
-  dpcp.check_consistency();
+  assert(dpcp.check_consistency());
   struct NullBuffer : std::streambuf {
     int overflow(int c) { return c; }
   } nullBuffer;
