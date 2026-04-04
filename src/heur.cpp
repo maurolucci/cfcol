@@ -161,6 +161,11 @@ Vertex semigreedy_vertex_selector(const DPCPInst& dpcp,
   size_t minVal = std::numeric_limits<size_t>::max();
   size_t maxVal = 0;
   std::map<Vertex, size_t> valMap;
+
+  // Print the candidates and their values
+  dtd::cout << "Candidates: " << std::endl;
+  for (Vertex v : candidates) std::cout << v << std::endl;
+
   for (Vertex v : candidates) {
     if (removed.at(v)) continue;
     size_t val = evaluate_vertex(dpcp, removed, selected, adj,
@@ -204,6 +209,11 @@ void update_info(const DPCPInst& dpcp, std::map<Vertex, bool>& removed,
 bool first_step(const DPCPInst& dpcp, VertexVector& selected,
                 std::map<size_t, std::set<size_t>>& adj, const Params& params,
                 Heur2SVertexSelector vertexSelector) {
+  // Print the candidates and their values
+  dtd::cout << "Vertices: " << std::endl;
+  for (Vertex v : boost::make_iterator_range(vertices(dpcp.get_graph())))
+    std::cout << v << std::endl;
+
   // Map with the removed vertices
   std::map<Vertex, bool> removed;
   for (Vertex u : boost::make_iterator_range(vertices(dpcp.get_graph())))
