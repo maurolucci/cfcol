@@ -1,42 +1,7 @@
 #include "graph.hpp"
 
-#include <atomic>
 #include <boost/graph/copy.hpp>
-#include <cstdlib>
-#include <string>
-
-namespace {
-std::atomic_size_t g_next_instance_id{1};
-std::atomic_size_t g_live_instances{0};
-std::atomic_size_t g_peak_live_instances{0};
-std::atomic_size_t g_graph_ctor_calls{0};
-std::atomic_size_t g_copy_ctor_calls{0};
-std::atomic_size_t g_move_ctor_calls{0};
-std::atomic_size_t g_dtor_calls{0};
-
-bool dpcp_trace_enabled() {
-  const char* env = std::getenv("DPCP_TRACE_COPIES");
-  if (env == nullptr) return false;
-  const std::string value(env);
-  return !(value.empty() || value == "0" || value == "false" ||
-           value == "FALSE");
-}
-
-void dpcp_trace_log(const std::string& msg) {
-  if (dpcp_trace_enabled()) {
-    std::cerr << "[DPCP_TRACE] " << msg << std::endl;
-  }
-}
-
-void track_instance_birth() {
-  const size_t current_live = ++g_live_instances;
-  size_t peak_live = g_peak_live_instances.load();
-  while (
-      current_live > peak_live &&
-      !g_peak_live_instances.compare_exchange_weak(peak_live, current_live)) {
-  }
-}
-}  // namespace
+#include <utility>
 
 // Graph copying utilities
 // Copies the graph structure from src to dst, using vertex2CurrentId to map
@@ -102,8 +67,7 @@ void read_dpcp_instance(std::istream& graphStream, std::istream& partP,
 }
 
 DPCPInst::DPCPInst(const Graph& graph, const Partition& P, const Partition& Q)
-    : instanceId(g_next_instance_id++),
-      graph(),
+    : graph(),
       vertex2CurrentId(),
       P(),
       Q(),
@@ -114,10 +78,6 @@ DPCPInst::DPCPInst(const Graph& graph, const Partition& P, const Partition& Q)
       isInfeasible(false),
       hasTrivialSolution(false),
       density(0.0) {
-  g_graph_ctor_calls++;
-  track_instance_birth();
-  dpcp_trace_log("graph ctor dst=" + std::to_string(instanceId));
-
   // Copy the graph structure
   // Careful: vertex descriptors difer!
   graph_copy(graph, this->graph);
@@ -157,8 +117,7 @@ DPCPInst::DPCPInst(const Graph& graph, const Partition& P, const Partition& Q)
 }
 
 DPCPInst::DPCPInst(const DPCPInst& dpcp)
-    : instanceId(g_next_instance_id++),
-      graph(),
+    : graph(),
       vertex2CurrentId(),
       P(),
       Q(),
@@ -169,16 +128,13 @@ DPCPInst::DPCPInst(const DPCPInst& dpcp)
       isInfeasible(dpcp.is_infeasible_instance()),
       hasTrivialSolution(dpcp.has_trivial_solution()),
       density(dpcp.get_density()) {
-  g_copy_ctor_calls++;
-  track_instance_birth();
-  dpcp_trace_log("copy ctor src=" + std::to_string(dpcp.get_instance_id()) +
-                 " dst=" + std::to_string(instanceId));
-
   const Graph& srcGraph = dpcp.get_graph();
   const VertexMap<size_t>& srcVertex2CurrentId = dpcp.get_vertex2CurrentId();
   const Partition& srcP = dpcp.get_P();
   const Partition& srcQ = dpcp.get_Q();
 
+  // Copy the graph structure
+  // Careful: vertex descriptors difer!
   graph_copy(srcGraph, srcVertex2CurrentId, graph);
 
   // Map from old vertices (original) to new vertices (copy)
@@ -209,80 +165,19 @@ DPCPInst::DPCPInst(const DPCPInst& dpcp)
 }
 
 DPCPInst::DPCPInst(DPCPInst&& dpcp) noexcept
-    : instanceId(g_next_instance_id++),
-      graph(),
-      vertex2CurrentId(),
-      P(),
-      Q(),
-      vertex2Ppart(),
-      vertex2Qpart(),
+    : graph(std::move(dpcp.graph)),
+      vertex2CurrentId(std::move(dpcp.vertex2CurrentId)),
+      P(std::move(dpcp.P)),
+      Q(std::move(dpcp.Q)),
+      vertex2Ppart(std::move(dpcp.vertex2Ppart)),
+      vertex2Qpart(std::move(dpcp.vertex2Qpart)),
       isolated(std::move(dpcp.isolated)),
       isGCP(dpcp.is_gcp_instance()),
       isInfeasible(dpcp.is_infeasible_instance()),
       hasTrivialSolution(dpcp.has_trivial_solution()),
-      density(dpcp.get_density()) {
-  g_move_ctor_calls++;
-  track_instance_birth();
-  dpcp_trace_log("move ctor src=" + std::to_string(dpcp.get_instance_id()) +
-                 " dst=" + std::to_string(instanceId));
+      density(dpcp.get_density()) {}
 
-  const Graph& srcGraph = dpcp.get_graph();
-  const VertexMap<size_t>& srcVertex2CurrentId = dpcp.get_vertex2CurrentId();
-  const Partition& srcP = dpcp.get_P();
-  const Partition& srcQ = dpcp.get_Q();
-
-  // Rebuild all descriptor-based containers instead of moving them directly.
-  // With listS vertex descriptors, direct move can leave maps/partitions with
-  // descriptors not valid for the destination graph instance.
-  graph_copy(srcGraph, srcVertex2CurrentId, graph);
-
-  VertexMap<Vertex> vertexMap;
-  for (auto& [vOld, id] : srcVertex2CurrentId) {
-    Vertex vNew = vertex(id, graph);
-    vertexMap[vOld] = vNew;
-    vertex2CurrentId[vNew] = id;
-  }
-
-  P.resize(dpcp.get_nP(), std::vector<Vertex>());
-  for (size_t pi = 0; pi < dpcp.get_nP(); ++pi)
-    for (auto vOld : srcP[pi]) {
-      Vertex vNew = vertexMap[vOld];
-      P[pi].push_back(vNew);
-      vertex2Ppart[vNew] = pi;
-    }
-
-  Q.resize(dpcp.get_nQ(), std::vector<Vertex>());
-  for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj)
-    for (auto vOld : srcQ[qj]) {
-      Vertex vNew = vertexMap[vOld];
-      Q[qj].push_back(vNew);
-      vertex2Qpart[vNew] = qj;
-    }
-}
-
-DPCPInst::~DPCPInst() {
-  g_dtor_calls++;
-  --g_live_instances;
-  dpcp_trace_log("dtor id=" + std::to_string(instanceId));
-}
-
-void DPCPInst::reset_lifecycle_stats() {
-  g_live_instances = 0;
-  g_peak_live_instances = 0;
-  g_graph_ctor_calls = 0;
-  g_copy_ctor_calls = 0;
-  g_move_ctor_calls = 0;
-  g_dtor_calls = 0;
-}
-
-void DPCPInst::print_lifecycle_stats(std::ostream& out) {
-  out << "DPCPInst lifecycle stats: graph_ctor=" << g_graph_ctor_calls.load()
-      << ", copy_ctor=" << g_copy_ctor_calls.load()
-      << ", move_ctor=" << g_move_ctor_calls.load()
-      << ", dtor=" << g_dtor_calls.load()
-      << ", live=" << g_live_instances.load()
-      << ", peak_live=" << g_peak_live_instances.load() << std::endl;
-}
+DPCPInst::~DPCPInst() {}
 
 GCPGraph DPCPInst::get_gcp_graph() const {
   GCPGraph gcpGraph;
