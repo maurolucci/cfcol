@@ -156,6 +156,7 @@ Vertex semigreedy_vertex_selector(const DPCPInst& dpcp,
                                   const VertexVector& selected,
                                   std::map<size_t, std::set<size_t>>& adj,
                                   const Params& params) {
+  dpcp.check_consistency();
   // First, find the lowest and highest degree among the candidates
   size_t minVal = std::numeric_limits<size_t>::max();
   size_t maxVal = 0;
