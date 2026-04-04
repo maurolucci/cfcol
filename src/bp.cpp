@@ -13,8 +13,11 @@ inline bool should_prune_by_bound(double lowerBound, double primalBound) {
 }
 }  // namespace
 
+Node::Node(std::unique_ptr<LP> lp, size_t depth, size_t id)
+  : lp(std::move(lp)), depth(depth), id(id) {}
+
 Node::Node(LP&& lp, size_t depth, size_t id)
-    : lp(std::make_unique<LP>(std::move(lp))), depth(depth), id(id) {}
+  : Node(std::make_unique<LP>(std::move(lp)), depth, id) {}
 
 double Node::get_obj_value() const { return lp->get_lower_bound(); }
 
@@ -39,12 +42,12 @@ void Node::save(Col& sol) { sol = lp->get_lp_solution(); }
 void Node::save_heur(Col& sol) { sol = lp->get_heur_solution(); }
 
 void Node::branch(std::vector<Node>& sons) {
-  std::vector<LP> lps;
-  lp->branch(lps);
+  std::vector<std::unique_ptr<LP>> childLps;
+  lp->branch(childLps);
   sons.clear();
-  sons.reserve(lps.size());
-  for (auto& l : lps) {
-    sons.emplace_back(std::move(l), depth + 1);
+  sons.reserve(childLps.size());
+  for (auto& childLp : childLps) {
+    sons.emplace_back(std::move(childLp), depth + 1);
   }
 }
 

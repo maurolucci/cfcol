@@ -1013,7 +1013,7 @@ Col LP::get_heur_solution() {
   return originalCol;
 }
 
-void LP::branch(std::vector<LP>& sons) {
+void LP::branch(std::vector<std::unique_ptr<LP>>& sons) {
   const Vertex null_v = boost::graph_traits<Graph>::null_vertex();
   Vertex v = branchingVertex;
   assert(v != null_v);
@@ -1026,14 +1026,14 @@ void LP::branch(std::vector<LP>& sons) {
 
   sons.clear();
   sons.reserve(2);
-  sons.emplace_back(*this);
-  sons.emplace_back(*this);
+  sons.emplace_back(std::make_unique<LP>(*this));
+  sons.emplace_back(std::make_unique<LP>(*this));
 
   // *******
   // ** Left branch: v is preselected
   // *******
 
-  DPCPInst& dpcpLeft = sons[0].get_dpcp_inst();
+  DPCPInst& dpcpLeft = sons[0]->get_dpcp_inst();
   Graph& graphLeft = dpcpLeft.get_graph();
 
   // Map from original vertices to new vertices
@@ -1062,7 +1062,7 @@ void LP::branch(std::vector<LP>& sons) {
   // ** Right branch: v is forbidden
   // *******
 
-  DPCPInst& dpcpRight = sons[1].get_dpcp_inst();
+  DPCPInst& dpcpRight = sons[1]->get_dpcp_inst();
   Graph& graphRight = dpcpRight.get_graph();
 
   // Map from original vertices to new vertices
@@ -1116,10 +1116,10 @@ void LP::branch(std::vector<LP>& sons) {
   // *******
   // ** Fill pools and late columns
   // *******
-  Pool& poolLeft = sons[0].get_pool();
-  Pool& poolRight = sons[1].get_pool();
-  Pool& lateLeft = sons[0].get_late_columns();
-  Pool& lateRight = sons[1].get_late_columns();
+  Pool& poolLeft = sons[0]->get_pool();
+  Pool& poolRight = sons[1]->get_pool();
+  Pool& lateLeft = sons[0]->get_late_columns();
+  Pool& lateRight = sons[1]->get_late_columns();
 
   if (params.inheritColumns > 0) {
     if (params.inheritColumns == 3) {

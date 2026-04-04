@@ -19,6 +19,7 @@ using TimePoint = ClockType::time_point;
 
 class Node {
  public:
+  explicit Node(std::unique_ptr<LP> lp, size_t depth = 0, size_t id = 0);
   explicit Node(LP&& lp, size_t depth = 0, size_t id = 0);
 
   Node(const Node&) = delete;

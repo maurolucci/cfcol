@@ -42,7 +42,13 @@ class DPCPInst {
   // Constructors and destructor
   DPCPInst(const Graph& graph, const Partition& P, const Partition& Q);
   DPCPInst(const DPCPInst& dpcp);
+  DPCPInst(DPCPInst&& dpcp) noexcept;
   ~DPCPInst();
+
+  // Debug utilities for tracking unintended copies during execution.
+  static void reset_lifecycle_stats();
+  static void print_lifecycle_stats(std::ostream& out);
+  [[nodiscard]] size_t get_instance_id() const { return instanceId; }
 
   // Getters
   [[nodiscard]] Graph& get_graph() { return graph; }
@@ -96,6 +102,7 @@ class DPCPInst {
   void forbid_vertex(Vertex v);
 
  private:
+  size_t instanceId;  // Debug id to trace copies/moves/lifetime in logs
   Graph graph;                         // Graph G = (V,E)
   VertexMap<size_t> vertex2CurrentId;  // Map from V to {0,..,|V|-1}
   Partition P;  // P: partition of V into P-parts, P[pi] = vertices in P-part pi

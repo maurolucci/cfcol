@@ -15,6 +15,7 @@ extern "C" {
 
 #include <chrono>
 #include <iostream>
+#include <memory>
 
 #define EPSILON 0.00001  // 10e-5
 
@@ -61,7 +62,7 @@ class LP {
   Pool& get_late_columns() { return lateColumns; }
 
   // Branch
-  void branch(std::vector<LP>& sons);
+  void branch(std::vector<std::unique_ptr<LP>>& sons);
 
  private:
   DPCPInst dpcp;  // DPCP instance at the current node
