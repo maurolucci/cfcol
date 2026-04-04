@@ -156,6 +156,8 @@ Vertex semigreedy_vertex_selector(const DPCPInst& dpcp,
                                   const VertexVector& selected,
                                   std::map<size_t, std::set<size_t>>& adj,
                                   const Params& params) {
+  // Imprimir la direccion de memoria a donde referencia dpcp
+  std::cout << "Direccion de memoria de dpcp: " << &dpcp << std::endl;
   // First, find the lowest and highest degree among the candidates
   size_t minVal = std::numeric_limits<size_t>::max();
   size_t maxVal = 0;
@@ -358,6 +360,9 @@ HeurStats dpcp_2_step_greedy_heur(const DPCPInst& dpcp, Col& col,
 HeurStats dpcp_2_step_semigreedy_heur(const DPCPInst& dpcp, Col& col,
                                       const Params& params,
                                       std::ostream& iterFile) {
+  // Imprimir la direccion de memoria a donde referencia dpcp
+  std::cout << "Direccion de memoria de dpcp: " << &dpcp << std::endl;
+
   TimePoint start = ClockType::now();
   HeurStats stats;
   stats.totalIters =
