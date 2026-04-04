@@ -14,7 +14,7 @@ inline bool should_prune_by_bound(double lowerBound, double primalBound) {
 }  // namespace
 
 Node::Node(const DPCPInst& origDpcp, Params& params, Stats& stats,
-           std::ostream& log, std::ostream& debugLog, bool isRoot = false)
+           std::ostream& log, std::ostream& debugLog, bool isRoot)
     : lp(origDpcp, params, stats, log, debugLog, isRoot), depth(0), id(0) {}
 
 Node::Node(Node& parent, BRANCH_NODE branchNode, size_t depth, size_t id)
