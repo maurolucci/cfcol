@@ -63,14 +63,15 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
       stables(),
       posVars() {
   const Vertex null_v = boost::graph_traits<Graph>::null_vertex();
-  Vertex v = other.dpcp.branching_vertex;
+  DPCPInst& otherDpcp = other.dpcp;
+  Vertex v = otherDpcp.get_branching_vertex();
   assert(v != null_v);
 
   // Map from original vertices to new vertices
   // Necessary to translate the columns of the pool
   std::map<Vertex, Vertex> vmap;
-  for (auto [v, v_id] : other.dpcp.get_vertex2CurrentId()) {
-    Vertex uLeft = vertex(v_id, graph);
+  for (auto [v, v_id] : otherDpcp.get_vertex2CurrentId()) {
+    Vertex uLeft = vertex(v_id, dpcp.graph);
     assert(uLeft != null_v);
     vmap.emplace(v, uLeft);
   }
@@ -80,12 +81,13 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
     // Preselect v
     auto it = vmap.find(v);
     assert(it != vmap.end());
-    preselect_vertex(it->second);
-    if (params.preprocessing) preprocess();
+    dpcp.preselect_vertex(it->second);
+    if (params.preprocessing) dpcp.preprocess();
     if (params.is_verbose(2)) {
-      debugLog << "Left child after preprocessing: |V|=" << num_vertices(graph)
-               << ", |E|=" << num_edges(graph) << ", |P|=" << get_nP()
-               << ", |Q|=" << get_nQ() << std::endl;
+      debugLog << "Left child after preprocessing: |V|="
+               << num_vertices(dpcp.graph) << ", |E|=" << num_edges(dpcp.graph)
+               << ", |P|=" << dpcp.get_nP() << ", |Q|=" << dpcp.get_nQ()
+               << std::endl;
     }
 
   } else if (branchNode == BRANCH_NODE_RIGHT) {
@@ -95,30 +97,31 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
   if (params.inheritColumns > 0) {
     if (params.inheritColumns == 3) {
       // Mode 3: positive columns go directly to LP, non-positive go to pool
-      for (size_t i = 0; i < other.stables.size(); ++i) {
-        Column col = translate_column(other.stables[i], vmap);
-        if (std::find(other.dpcp.posVars.begin(), other.dpcp.posVars.end(),
-                      i) != other.dpcp.posVars.end())
-          late_columns.push_back(col);
+      for (size_t i = 0; i < other.get_stables().size(); ++i) {
+        Column col = translate_column(other.get_stables()[i], vmap);
+        if (std::find(otherDpcp.get_pos_vars().begin(),
+                      otherDpcp.get_pos_vars().end(),
+                      i) != otherDpcp.get_pos_vars().end())
+          lateColumns.push_back(col);
         else
           pool.push_back(col);
       }
     } else if (params.inheritColumns == 4) {
       // Mode 4: all columns go directly to LP, pool remains empty
-      for (size_t i = 0; i < other.stables.size(); ++i) {
-        Column col = translate_column(other.stables[i], vmap);
-        late_columns.push_back(col);
+      for (size_t i = 0; i < other.get_stables().size(); ++i) {
+        Column col = translate_column(other.get_stables()[i], vmap);
+        lateColumns.push_back(col);
       }
     } else if (params.inheritColumns == 1) {
       // Mode 1: all columns go to pool
-      for (size_t i = 0; i < other.stables.size(); ++i) {
-        Column col = translate_column(other.stables[i], vmap);
+      for (size_t i = 0; i < other.get_stables().size(); ++i) {
+        Column col = translate_column(other.get_stables()[i], vmap);
         pool.push_back(col);
       }
     } else {
       // Mode 2: positive columns go to pool, non-positive are discarded
-      for (size_t i : other.dpcp.posVars) {
-        Column col = translate_column(other.stables[i], vmap);
+      for (size_t i : otherDpcp.get_pos_vars()) {
+        Column col = translate_column(other.get_stables()[i], vmap);
         pool.push_back(col);
       }
     }

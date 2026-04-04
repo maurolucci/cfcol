@@ -68,9 +68,11 @@ class LP {
 
   // Getters for branching
   [[nodiscard]] Vertex get_branching_vertex() const { return branchingVertex; }
-  DPCPInst& get_dpcp_inst() { return dpcp; }
-  Pool& get_pool() { return pool; }
-  Pool& get_late_columns() { return lateColumns; }
+  [[nodiscard]] DPCPInst& get_dpcp_inst() const { return dpcp; }
+  [[nodiscard]] Pool& get_pool() const { return pool; }
+  [[nodiscard]] Pool& get_late_columns() const { return lateColumns; }
+  [[nodiscard]] Columns& get_stables() const { return stables; }
+  [[nodiscard]] std::vector<size_t>& get_pos_vars() const { return posVars; }
 
   // Branch
   // void branch(std::vector<std::unique_ptr<LP>>& sons);
