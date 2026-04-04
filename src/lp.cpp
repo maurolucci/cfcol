@@ -140,11 +140,10 @@ LP::~LP() {}
 Column LP::translate_column(const Column& col,
                             const std::map<Vertex, Vertex>& vertexMap) {
   Column translatedCol;
-  Graph& graph = dpcp.get_graph();
   for (auto u : col.stable) {
     auto v = vertexMap.at(u);
-    if (graph.has_vertex(v))
-      translatedCol.add_vertex(v, graph.get_P_part(v), graph.get_Q_part(v));
+    if (dpcp.has_vertex(v))
+      translatedCol.add_vertex(v, dpcp.get_P_part(v), dpcp.get_Q_part(v));
   }
   return translatedCol;
 }
