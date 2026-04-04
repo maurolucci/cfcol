@@ -156,13 +156,13 @@ Vertex semigreedy_vertex_selector(const DPCPInst& dpcp,
                                   const VertexVector& selected,
                                   std::map<size_t, std::set<size_t>>& adj,
                                   const Params& params) {
-  // Imprimir la direccion de memoria a donde referencia dpcp
-  std::cout << "Direccion de memoria de dpcp: " << &dpcp << std::endl;
   // First, find the lowest and highest degree among the candidates
   size_t minVal = std::numeric_limits<size_t>::max();
   size_t maxVal = 0;
   std::map<Vertex, size_t> valMap;
   for (Vertex v : candidates) {
+    // Imprimir la direccion de memoria a donde referencia dpcp
+    std::cout << "Direccion de memoria de v: " << v << std::endl;
     if (removed.at(v)) continue;
     size_t val = evaluate_vertex(dpcp, removed, selected, adj,
                                  params.heuristic2stepVariant, v);
@@ -261,6 +261,12 @@ bool first_step(const DPCPInst& dpcp, VertexVector& selected,
       else if (qj > qj2)
         adj[qj2].insert(qj);
     }
+    std::cout << "Selected vertex " << dpcp.get_current_id(v)
+              << " with address " << v << " from P[" << pi << "] and Q[" << qj
+              << "] with value "
+              << evaluate_vertex(dpcp, removed, selected, adj,
+                                 params.heuristic2stepVariant, v)
+              << std::endl;
     selected.push_back(v);
 
     // Remove the vertices invalidated by choosing v, i.e.
@@ -360,9 +366,6 @@ HeurStats dpcp_2_step_greedy_heur(const DPCPInst& dpcp, Col& col,
 HeurStats dpcp_2_step_semigreedy_heur(const DPCPInst& dpcp, Col& col,
                                       const Params& params,
                                       std::ostream& iterFile) {
-  // Imprimir la direccion de memoria a donde referencia dpcp
-  std::cout << "Direccion de memoria de dpcp: " << &dpcp << std::endl;
-
   TimePoint start = ClockType::now();
   HeurStats stats;
   stats.totalIters =
