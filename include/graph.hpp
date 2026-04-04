@@ -45,6 +45,9 @@ class DPCPInst {
   DPCPInst(DPCPInst&& dpcp) noexcept;
   ~DPCPInst();
 
+  // Check the consistency of the instance
+  bool check_consistency() const;
+
   // Getters
   [[nodiscard]] Graph& get_graph() { return graph; }
   [[nodiscard]] const Graph& get_graph() const { return graph; }
@@ -109,9 +112,6 @@ class DPCPInst {
   bool isInfeasible;        // Is the instance infeasible?
   bool hasTrivialSolution;  // Does the instance have a trivial solution?
   double density;           // Density of the graph (before preprocessing)
-
-  // Check the consistency of the instance
-  bool check_consistency() const;
 
   // Internal preprocessing steps
   void preprocess_step1();
