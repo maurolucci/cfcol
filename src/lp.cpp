@@ -142,8 +142,8 @@ Column LP::translate_column(const Column& col,
   Column translatedCol;
   for (auto u : col.stable) {
     auto v = vertexMap.at(u);
-    if (has_vertex(v))
-      translatedCol.add_vertex(v, get_P_part(v), get_Q_part(v));
+    if (graph.has_vertex(v))
+      translatedCol.add_vertex(v, graph.get_P_part(v), graph.get_Q_part(v));
   }
   return translatedCol;
 }
