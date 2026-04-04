@@ -137,8 +137,8 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
 
 LP::~LP() {}
 
-Columns LP::translate_column(const Column& col,
-                             const std::map<Vertex, Vertex>& vertexMap) {
+Column LP::translate_column(const Column& col,
+                            const std::map<Vertex, Vertex>& vertexMap) {
   Column translatedCol;
   for (auto u : col.stable) {
     auto v = vertexMap.at(u);
