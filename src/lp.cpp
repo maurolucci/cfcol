@@ -63,7 +63,7 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
       stables(),
       posVars() {
   const Vertex null_v = boost::graph_traits<Graph>::null_vertex();
-  DPCPInst& otherDpcp = other.get_dpcp_inst();
+  const DPCPInst& otherDpcp = other.get_dpcp_inst();
   Vertex v = otherDpcp.get_branching_vertex();
   assert(v != null_v);
 
