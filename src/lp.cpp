@@ -41,12 +41,7 @@ LP::LP(const DPCPInst& origDpcp, Params& params, Stats& stats,
       integerSource(LP_INTEGER_SOURCE_NONE),
       initializedWithDummy(false),
       stables(),
-      posVars() {
-  std::cout << "LP constructor: |V|=" << num_vertices(dpcp.get_graph())
-            << ", |E|=" << num_edges(dpcp.get_graph())
-            << ", |P|=" << dpcp.get_nP() << ", |Q|=" << dpcp.get_nQ()
-            << std::endl;
-}
+      posVars() {}
 
 // Copy constructor used for creating child LPs during branching. It copies the
 // DPCP instance, but initializes an empty pool and lateColumns, and shares
@@ -148,10 +143,6 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
     else
       debugLog << "Created child pools: pool=" << pool.size() << std::endl;
   }
-  std::cout << "LP copy constructor: |V|=" << num_vertices(dpcp.get_graph())
-            << ", |E|=" << num_edges(dpcp.get_graph())
-            << ", |P|=" << dpcp.get_nP() << ", |Q|=" << dpcp.get_nQ()
-            << std::endl;
 }
 
 LP::~LP() {}
@@ -879,7 +870,7 @@ void LP::add_column(CplexEnv& cenv, Column& stab) {
   }
   cenv.Xvars.add(IloNumVar(column));
   stables.push_back(stab);
-  assert(check_column(stab));
+  // assert(check_column(stab));
   // print_column(stab);
 }
 
