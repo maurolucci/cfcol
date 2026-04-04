@@ -91,8 +91,8 @@ void Stats::write_stats(std::ostream& file) {
        << ninfeasPrepro << "," << ninfeasCheck << "," << ninfeasAux << ","
        << gcpTime / (nsolGCP > 0 ? nsolGCP : 1) << ","
        << nsolHeur + nsolLR + nsolGCP + nsolTrivial << "," << nsolHeur << ","
-       << nsolLR << "," << nsolGCP << "," << nsolTrivial << "," << ntrivial
-       << std::endl;
+      << nsolLR << "," << nsolGCP << "," << nsolTrivial << "," << ntrivial
+      << "," << nint << "," << nfrac << "," << ngcp << std::endl;
 
   file << rootlb << "," << rootub << "," << rootHeurTime << "," << rootFeasTime
        << ","
@@ -159,6 +159,9 @@ void Stats::print_stats(std::ostream& file) {
   file << "Infeasible nodes: " << ninfeasPrepro + ninfeasCheck + ninfeasAux
        << " (total), " << ninfeasPrepro << " (preprocessing), " << ninfeasCheck
        << " (heuristic), " << ninfeasAux << " (auxiliary)" << std::endl;
+    file << "Node type counts: " << nint << " (LP integer), " << nfrac
+      << " (LP fractional), " << ntrivial << " (trivial), " << ngcp
+      << " (GCP)" << std::endl;
   file << "GCP avg time: " << gcpTime / (nsolGCP > 0 ? nsolGCP : 1)
        << std::endl;
   file << "Solutions found: " << nsolHeur + nsolLR + nsolGCP + nsolTrivial

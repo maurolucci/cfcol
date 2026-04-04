@@ -84,6 +84,8 @@ class Stats {
   int ninfeasPrepro, ninfeasCheck, ninfeasAux;
   // Number of integer nodes detected in the byp tree
   int nint;
+  // Number of fractional nodes detected in the byp tree
+  int nfrac;
   // Number of trivial instances with n = 1 in the byp tree
   int ntrivial;
   // Number of GCP instances detected in the byp tree
@@ -145,6 +147,7 @@ class Stats {
         ninfeasCheck(0),
         ninfeasAux(0),
         nint(0),
+        nfrac(0),
         ntrivial(0),
         ngcp(0),
         gcpTime(0.0),

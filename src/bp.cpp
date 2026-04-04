@@ -206,6 +206,7 @@ LP_STATE BP::push(std::unique_ptr<Node> node) {
 
   switch (state) {
     case LP_INTEGER:
+      stats.nint++;
       obj_value = node->get_obj_value();
       if (obj_value < primal_bound) {
         node->save(best_integer_solution);
@@ -232,6 +233,7 @@ LP_STATE BP::push(std::unique_ptr<Node> node) {
       return state;  // Prune by optimality
 
     case LP_FRACTIONAL:
+      stats.nfrac++;
       obj_value = node->get_obj_value();
       if (should_prune_by_bound(obj_value, primal_bound))
         return state;  // Prune by bound

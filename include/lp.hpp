@@ -79,9 +79,6 @@ class LP {
     return posVars;
   }
 
-  // Branch
-  // void branch(std::vector<std::unique_ptr<LP>>& sons);
-
  private:
   DPCPInst dpcp;  // DPCP instance at the current node
   Pool pool;      // Pool of stable sets at the current node (inherited from the
