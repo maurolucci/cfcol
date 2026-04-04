@@ -99,9 +99,8 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
       // Mode 3: positive columns go directly to LP, non-positive go to pool
       for (size_t i = 0; i < other.get_stables().size(); ++i) {
         Column col = translate_column(other.get_stables()[i], vmap);
-        if (std::find(otherDpcp.get_pos_vars().begin(),
-                      otherDpcp.get_pos_vars().end(),
-                      i) != otherDpcp.get_pos_vars().end())
+        if (std::find(other.get_pos_vars().begin(), other.get_pos_vars().end(),
+                      i) != other.get_pos_vars().end())
           lateColumns.push_back(col);
         else
           pool.push_back(col);
@@ -120,7 +119,7 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
       }
     } else {
       // Mode 2: positive columns go to pool, non-positive are discarded
-      for (size_t i : otherDpcp.get_pos_vars()) {
+      for (size_t i : other.get_pos_vars()) {
         Column col = translate_column(other.get_stables()[i], vmap);
         pool.push_back(col);
       }
