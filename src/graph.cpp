@@ -183,13 +183,14 @@ bool DPCPInst::check_consistency() const {
   // Check that all vertices in P and Q are in the graph
   for (size_t pi = 0; pi < get_nP(); ++pi)
     for (Vertex v : P[pi]) {
-      auto [it, found] = vertices(graph) | boost::stf::find(v);
-      if (!found) return false;
+      auto [it, end] = vertices(graph);
+      auto ret = std::find_if(it, end, [v](Vertex u) { return u == v; });
+      if (ret == end) return false;
     }
   for (size_t qj = 0; qj < get_nQ(); ++qj)
     for (Vertex v : Q[qj]) {
-      auto [it, found] = vertices(graph) | boost::stf::find(v);
-      if (!found) return false;
+      auto ret = std::find_if(it, end, [v](Vertex u) { return u == v; });
+      if (ret == end) return false;
     }
   return true;
 }
