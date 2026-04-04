@@ -13,42 +13,41 @@ inline bool should_prune_by_bound(double lowerBound, double primalBound) {
 }
 }  // namespace
 
-Node::Node(std::unique_ptr<LP> lp, size_t depth, size_t id)
-    : lp(std::move(lp)), depth(depth), id(id) {}
+Node::Node(const DPCPInst& origDpcp, Params& params, Stats& stats,
+           std::ostream& log, std::ostream& debugLog, bool isRoot = false)
+    : lp(origDpcp, params, stats, log, debugLog, isRoot), depth(0), id(0) {}
 
-Node::Node(LP&& lp, size_t depth, size_t id)
-    : Node(std::make_unique<LP>(std::move(lp)), depth, id) {}
+Node::Node(Node& parent, BRANCH_NODE branchNode, size_t depth, size_t id)
+    : lp(parent.lp, branchNode), depth(depth), id(id) {}
 
-double Node::get_obj_value() const { return lp->get_lower_bound(); }
+double Node::get_obj_value() const { return lp.get_lower_bound(); }
 
 bool Node::operator>(const Node& n) const {
   return (get_obj_value() > n.get_obj_value());
 }
 
 LP_STATE Node::solve(double timelimit, double ub) {
-  return lp->solve(timelimit, ub);
+  return lp.solve(timelimit, ub);
 }
 
-bool Node::feas_sol() const { return lp->has_heur_solution(); }
+bool Node::feas_sol() const { return lp.has_heur_solution(); }
 
-size_t Node::feas_value() const { return lp->get_upper_bound(); }
+size_t Node::feas_value() const { return lp.get_upper_bound(); }
 
 LP_INTEGER_SOURCE Node::integer_source() const {
-  return lp->get_integer_source();
+  return lp.get_integer_source();
 }
 
-void Node::save(Col& sol) { sol = lp->get_lp_solution(); }
+void Node::save(Col& sol) { sol = lp.get_lp_solution(); }
 
-void Node::save_heur(Col& sol) { sol = lp->get_heur_solution(); }
+void Node::save_heur(Col& sol) { sol = lp.get_heur_solution(); }
 
-void Node::branch(std::vector<Node>& sons) {
-  std::vector<std::unique_ptr<LP>> childLps;
-  lp->branch(childLps);
+void Node::branch(std::vector<std::unique_ptr<Node>>& sons) {
   sons.clear();
-  sons.reserve(childLps.size());
-  for (auto& childLp : childLps) {
-    sons.emplace_back(std::move(childLp), depth + 1);
-  }
+  sons.reserve(2);
+  sons.emplace_back(std::make_unique<Node>(*this, BRANCH_NODE_LEFT, depth + 1));
+  sons.emplace_back(
+      std::make_unique<Node>(*this, BRANCH_NODE_RIGHT, depth + 1));
 }
 
 BP::BP(Params& params, std::ostream& log, std::ostream& debugLog, Col& sol,
@@ -74,15 +73,14 @@ Stats BP::solve(DPCPInst& origDpcp) {
       << ", |P|=" << origDpcp.get_nP() << ", |Q|=" << origDpcp.get_nQ()
       << std::endl;
 
-  LP rootLp(origDpcp, params, stats, log, debugLog, true);
-  DPCPInst& dpcp = rootLp.get_dpcp_inst();
+  auto root =
+      std::make_unique<Node>(origDpcp, params, stats, log, debugLog, true);
+  DPCPInst& dpcp = root->get_lp().get_dpcp_inst();
   if (params.preprocessing) dpcp.preprocess(true);
 
   log << "After preprocessing: |V|=" << num_vertices(dpcp.get_graph())
       << ", |E|=" << num_edges(dpcp.get_graph()) << ", |P|=" << dpcp.get_nP()
       << ", |Q|=" << dpcp.get_nQ() << std::endl;
-
-  Node root(std::move(rootLp), 0, nextNodeId++);
 
   auto state_after_push = [](LP_STATE lpState) -> std::optional<STATE> {
     switch (lpState) {
@@ -111,25 +109,25 @@ Stats BP::solve(DPCPInst& origDpcp) {
     while (!L.empty()) {
       // Pop next node
       show_stats();  // First show_stats, then pop
-      Node node = std::move(L.back());
+      std::unique_ptr<Node> node = std::move(L.back());
       pop();
 
       // Re-try to prune by bound, since primal_bound could have been improved
-      if (ceil(node.get_obj_value() - EPSILON_BP) >= primal_bound) continue;
+      if (ceil(node->get_obj_value() - EPSILON_BP) >= primal_bound) continue;
 
       // Branch
-      std::vector<Node> sons;
-      node.branch(sons);
+      std::vector<std::unique_ptr<Node>> sons;
+      node->branch(sons);
 
       if (params.is_verbose(2)) {
-        debugLog << "Branch of node id=" << node.get_id()
-                 << " at depth=" << node.get_depth() << " added " << sons.size()
-                 << " sons" << std::endl;
+        debugLog << "Branch of node id=" << node->get_id()
+                 << " at depth=" << node->get_depth() << " added "
+                 << sons.size() << " sons" << std::endl;
       }
 
       // Push sons (and solve initial LR)
       for (auto& n : sons) {
-        n.set_id(nextNodeId++);
+        n->set_id(nextNodeId++);
         if (const auto state = state_after_push(push(std::move(n)));
             state.has_value()) {
           return return_stats(*state);
@@ -180,26 +178,26 @@ Stats BP::return_stats(STATE state) {
   return stats;
 }
 
-LP_STATE BP::push(Node node) {
+LP_STATE BP::push(std::unique_ptr<Node> node) {
   nodes++;
   double obj_value;
 
   if (params.is_verbose(2)) {
-    debugLog << "Solving node id=" << node.get_id()
-             << " depth=" << node.get_depth() << std::endl;
+    debugLog << "Solving node id=" << node->get_id()
+             << " depth=" << node->get_depth() << std::endl;
   }
 
   // Solve the linear relaxation of the node and prune if possible
   const double elapsed =
       std::chrono::duration<double>(ClockType::now() - start_t).count();
-  LP_STATE state = node.solve(params.timeLimit - elapsed, primal_bound);
+  LP_STATE state = node->solve(params.timeLimit - elapsed, primal_bound);
 
   // If a better feasible solution was found, save it
-  if (node.feas_sol()) {
-    obj_value = node.feas_value();
+  if (node->feas_sol()) {
+    obj_value = node->feas_value();
     if (obj_value < primal_bound) {
       stats.nsolHeur++;
-      node.save_heur(best_integer_solution);
+      node->save_heur(best_integer_solution);
       log << "New best integer solution found by heuristic with value: "
           << obj_value << std::endl;
       update_primal_bound(obj_value);
@@ -208,10 +206,10 @@ LP_STATE BP::push(Node node) {
 
   switch (state) {
     case LP_INTEGER:
-      obj_value = node.get_obj_value();
+      obj_value = node->get_obj_value();
       if (obj_value < primal_bound) {
-        node.save(best_integer_solution);
-        switch (node.integer_source()) {
+        node->save(best_integer_solution);
+        switch (node->integer_source()) {
           case LP_INTEGER_SOURCE_GCP:
             stats.nsolGCP++;
             log << "New best integer solution found by GCP with value: "
@@ -234,7 +232,7 @@ LP_STATE BP::push(Node node) {
       return state;  // Prune by optimality
 
     case LP_FRACTIONAL:
-      obj_value = node.get_obj_value();
+      obj_value = node->get_obj_value();
       if (should_prune_by_bound(obj_value, primal_bound))
         return state;  // Prune by bound
       break;           // Do not prune
@@ -253,9 +251,9 @@ LP_STATE BP::push(Node node) {
     return state;
   }
 
-  const double node_obj_value = node.get_obj_value();
+  const double node_obj_value = node->get_obj_value();
   for (auto it = L.begin(); it != L.end(); ++it)
-    if (node_obj_value > it->get_obj_value()) {
+    if (node_obj_value > (*it)->get_obj_value()) {
       L.insert(it, std::move(node));
       return state;
     }
@@ -264,7 +262,7 @@ LP_STATE BP::push(Node node) {
   return state;
 }
 
-Node& BP::top() { return L.back(); }
+Node& BP::top() { return *L.back(); }
 
 void BP::pop() { L.pop_back(); }
 
@@ -273,7 +271,7 @@ void BP::update_primal_bound(double obj_value) {
 
   if (params.use_dfs_tree_search()) {
     for (auto it = L.begin(); it != L.end();) {
-      const double node_obj_value = it->get_obj_value();
+      const double node_obj_value = (*it)->get_obj_value();
       if (node_obj_value >= primal_bound)
         it = L.erase(it);
       else
@@ -283,7 +281,7 @@ void BP::update_primal_bound(double obj_value) {
   }
 
   for (auto it = L.begin(); it != L.end();) {
-    const double node_obj_value = it->get_obj_value();
+    const double node_obj_value = (*it)->get_obj_value();
     if (node_obj_value >= primal_bound)
       it = L.erase(it);
     else
@@ -297,9 +295,10 @@ double BP::calculate_dual_bound() {
   if (!L.empty()) {
     if (params.use_dfs_tree_search()) {
       for (auto it = L.begin(); it != L.end(); ++it)
-        if (it->get_obj_value() < dual_bound) dual_bound = it->get_obj_value();
+        if ((*it)->get_obj_value() < dual_bound)
+          dual_bound = (*it)->get_obj_value();
     } else {
-      dual_bound = L.front().get_obj_value();
+      dual_bound = L.front()->get_obj_value();
     }
   }
 

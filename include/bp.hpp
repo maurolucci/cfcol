@@ -19,8 +19,10 @@ using TimePoint = ClockType::time_point;
 
 class Node {
  public:
-  explicit Node(std::unique_ptr<LP> lp, size_t depth = 0, size_t id = 0);
-  explicit Node(LP&& lp, size_t depth = 0, size_t id = 0);
+  Node(const DPCPInst& origDpcp, Params& params, Stats& stats,
+       std::ostream& log, std::ostream& debugLog, bool isRoot = false);
+  explicit Node(Node& parent, BRANCH_NODE branchNode, size_t depth = 0,
+                size_t id = 0);
 
   Node(const Node&) = delete;
   Node& operator=(const Node&) = delete;
@@ -41,11 +43,12 @@ class Node {
 
   void save(Col& sol);
   void save_heur(Col& sol);
+  LP& get_lp() { return lp; }
 
-  void branch(std::vector<Node>& sons);
+  void branch(std::vector<std::unique_ptr<Node>>& sons);
 
  private:
-  std::unique_ptr<LP> lp;
+  LP lp;
   size_t depth;
   size_t id;
 };
@@ -64,7 +67,7 @@ class BP {
   Stats& get_stats() { return stats; }
 
  private:
-  std::list<Node> L;  // Priority queue
+  std::list<std::unique_ptr<Node>> L;  // Priority queue
 
   Params& params;              // Input parameters
   Col& best_integer_solution;  // Current best integer solution
@@ -79,7 +82,7 @@ class BP {
   Stats stats;
 
   Stats return_stats(STATE state);
-  LP_STATE push(Node node);
+  LP_STATE push(std::unique_ptr<Node> node);
   Node& top();
   void pop();
   void update_primal_bound(double obj_value);

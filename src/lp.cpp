@@ -27,7 +27,7 @@ auto find_most_fractional(std::map<Vertex, double>& m) {
 
 LP::LP(const DPCPInst& origDpcp, Params& params, Stats& stats,
        std::ostream& log, std::ostream& debugLog, bool isRoot)
-    : dpcp(),
+    : dpcp(origDpcp),  // This forces a copy
       pool(),
       lateColumns(),
       origDpcp(origDpcp),
@@ -41,11 +41,12 @@ LP::LP(const DPCPInst& origDpcp, Params& params, Stats& stats,
       integerSource(LP_INTEGER_SOURCE_NONE),
       initializedWithDummy(false),
       stables(),
-      posVars() {
-  graph_copy(origDpcp.get_graph(), graph);
-}
+      posVars() {}
 
-LP::LP(const LP& other)
+// Copy constructor used for creating child LPs during branching. It copies the
+// DPCP instance, but initializes an empty pool and lateColumns, and shares
+// references to the original DPCP, parameters and stats, and log streams.
+LP::LP(const LP& other, BRANCH_NODE branchNode)
     : dpcp(other.dpcp),
       pool(),
       lateColumns(),
@@ -60,9 +61,90 @@ LP::LP(const LP& other)
       integerSource(LP_INTEGER_SOURCE_NONE),
       initializedWithDummy(false),
       stables(),
-      posVars() {}
+      posVars() {
+  const Vertex null_v = boost::graph_traits<Graph>::null_vertex();
+  Vertex v = other.dpcp.branching_vertex;
+  assert(v != null_v);
+
+  // Map from original vertices to new vertices
+  // Necessary to translate the columns of the pool
+  std::map<Vertex, Vertex> vmap;
+  for (auto [v, v_id] : other.dpcp.get_vertex2CurrentId()) {
+    Vertex uLeft = vertex(v_id, graph);
+    assert(uLeft != null_v);
+    vmap.emplace(v, uLeft);
+  }
+
+  // v is preselected
+  if (branchNode == BRANCH_NODE_LEFT) {
+    // Preselect v
+    auto it = vmap.find(v);
+    assert(it != vmap.end());
+    preselect_vertex(it->second);
+    if (params.preprocessing) preprocess();
+    if (params.is_verbose(2)) {
+      debugLog << "Left child after preprocessing: |V|=" << num_vertices(graph)
+               << ", |E|=" << num_edges(graph) << ", |P|=" << get_nP()
+               << ", |Q|=" << get_nQ() << std::endl;
+    }
+
+  } else if (branchNode == BRANCH_NODE_RIGHT) {
+  }
+
+  // Fill pools and late columns
+  if (params.inheritColumns > 0) {
+    if (params.inheritColumns == 3) {
+      // Mode 3: positive columns go directly to LP, non-positive go to pool
+      for (size_t i = 0; i < other.stables.size(); ++i) {
+        Column col = translate_column(other.stables[i], vmap);
+        if (std::find(other.dpcp.posVars.begin(), other.dpcp.posVars.end(),
+                      i) != other.dpcp.posVars.end())
+          late_columns.push_back(col);
+        else
+          pool.push_back(col);
+      }
+    } else if (params.inheritColumns == 4) {
+      // Mode 4: all columns go directly to LP, pool remains empty
+      for (size_t i = 0; i < other.stables.size(); ++i) {
+        Column col = translate_column(other.stables[i], vmap);
+        late_columns.push_back(col);
+      }
+    } else if (params.inheritColumns == 1) {
+      // Mode 1: all columns go to pool
+      for (size_t i = 0; i < other.stables.size(); ++i) {
+        Column col = translate_column(other.stables[i], vmap);
+        pool.push_back(col);
+      }
+    } else {
+      // Mode 2: positive columns go to pool, non-positive are discarded
+      for (size_t i : other.dpcp.posVars) {
+        Column col = translate_column(other.stables[i], vmap);
+        pool.push_back(col);
+      }
+    }
+  }
+
+  if (params.is_verbose(2)) {
+    if (params.inheritColumns == 3 || params.inheritColumns == 4)
+      debugLog << "Created child pools: pool=" << pool.size()
+               << ", late=" << lateColumns.size() << std::endl;
+    else
+      debugLog << "Created child pools: pool=" << pool.size() << std::endl;
+  }
+}
 
 LP::~LP() {}
+
+Columns LP::translate_column(const Column& col,
+                             const std::map<Vertex, Vertex>& vertexMap) {
+  Column translatedCol;
+  for (auto u : col.stable) {
+    auto v = vertexMap.at(u);
+    if (has_vertex(v))
+      translatedCol.add_vertex(v, get_P_part(v), get_Q_part(v));
+  }
+  return translatedCol;
+}
 
 LP_STATE LP::solve(double timelimit, double ub) {
   auto startTime = std::chrono::high_resolution_clock::now();
@@ -997,7 +1079,7 @@ Col LP::get_heur_solution() {
   return originalCol;
 }
 
-void LP::branch(std::vector<std::unique_ptr<LP>>& sons) {
+/* void LP::branch(std::vector<std::unique_ptr<LP>>& sons) {
   const Vertex null_v = boost::graph_traits<Graph>::null_vertex();
   Vertex v = branchingVertex;
   assert(v != null_v);
@@ -1149,4 +1231,4 @@ void LP::branch(std::vector<std::unique_ptr<LP>>& sons) {
   }
 
   return;
-}
+} */

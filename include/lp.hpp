@@ -29,12 +29,24 @@ enum LP_INTEGER_SOURCE {
   LP_INTEGER_SOURCE_TRIVIAL,
 };
 
+enum BRANCH_NODE {
+  BRANCH_NODE_NONE,
+  BRANCH_NODE_LEFT,
+  BRANCH_NODE_RIGHT,
+};
+
 class LP {
  public:
   LP(const DPCPInst& origDpcp, Params& params, Stats& stats, std::ostream& log,
      std::ostream& debugLog, bool isRoot = false);
-  LP(const LP& other);      // Copy constructor
-  LP(LP&& other) noexcept;  // Move constructor
+  LP(const LP& other, BRANCH_NODE branchNode);  // Copy constructor
+
+  // Move constructor and move assignment operator are deleted to avoid
+  // accidental moves that can lead to dangling references in the graph and
+  // partitions.
+  LP(LP&& other) noexcept = delete;
+  LP& operator=(LP&& other) noexcept = delete;
+
   ~LP();
 
   // Optimize the linear relaxation by column generation
@@ -61,7 +73,7 @@ class LP {
   Pool& get_late_columns() { return lateColumns; }
 
   // Branch
-  void branch(std::vector<std::unique_ptr<LP>>& sons);
+  // void branch(std::vector<std::unique_ptr<LP>>& sons);
 
  private:
   DPCPInst dpcp;  // DPCP instance at the current node
@@ -111,6 +123,11 @@ class LP {
 
   PricingSummary pricingSummary;
 
+  // Translate a column from the parent node to the current node using the
+  // provided vertex map
+  Column translate_column(const Column& col,
+                          const std::map<Vertex, Vertex>& vertexMap);
+
   // Exact solve of a GCP instance
   LP_STATE gcp_solve(double timelimit, double ub);
 
@@ -126,7 +143,6 @@ class LP {
   // Initialize LP
   void add_constraints_and_objective(CplexEnv& cenv);
   void add_initial_columns(CplexEnv& cenv);
-  void repair_pool(Pool& pool);
 
   // Pricing methods
   int pricing(CplexEnv& cenv, PricingEnv& penv, IloNumArray& dualsP,
