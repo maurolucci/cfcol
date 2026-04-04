@@ -252,6 +252,7 @@ bool first_step(const DPCPInst& dpcp, VertexVector& selected,
                                   compareFunc);
     unprocessedP.erase(pi);
 
+    dpcp.print_Pi(pi);
     std::cout << "Processing P[" << pi << "], size = " << nP.at(pi)
               << std::endl;
     for (Vertex v : dpcp.get_P()[pi]) std::cout << v << std::endl;
