@@ -210,8 +210,6 @@ bool first_step(const DPCPInst& dpcp, VertexVector& selected,
   for (Vertex u : boost::make_iterator_range(vertices(dpcp.get_graph()))) {
     std::cout << "Addind vertex " << u << std::endl;
     removed.emplace(u, false);
-    assert(dpcp.has_vertex(u));
-    assert(dpcp.get_graph()[u] == u);
   }
 
   // Fill the map with the size of each P[pi]
@@ -246,6 +244,9 @@ bool first_step(const DPCPInst& dpcp, VertexVector& selected,
     size_t pi = *std::min_element(unprocessedP.begin(), unprocessedP.end(),
                                   compareFunc);
     unprocessedP.erase(pi);
+
+    for (Vertex v : dpcp.get_P()[pi])
+      std::cout << "P[" << pi << "] vertex: " << v << std::endl;
 
     // Choose a vertex, with some criterion
     Vertex v =
