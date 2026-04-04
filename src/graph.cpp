@@ -208,25 +208,6 @@ DPCPInst::DPCPInst(const DPCPInst& dpcp)
     }
 }
 
-DPCPInst::DPCPInst(DPCPInst&& dpcp) noexcept
-    : instanceId(g_next_instance_id++),
-      graph(std::move(dpcp.graph)),
-      vertex2CurrentId(std::move(dpcp.vertex2CurrentId)),
-      P(std::move(dpcp.P)),
-      Q(std::move(dpcp.Q)),
-      vertex2Ppart(std::move(dpcp.vertex2Ppart)),
-      vertex2Qpart(std::move(dpcp.vertex2Qpart)),
-      isolated(std::move(dpcp.isolated)),
-      isGCP(dpcp.isGCP),
-      isInfeasible(dpcp.isInfeasible),
-      hasTrivialSolution(dpcp.hasTrivialSolution),
-      density(dpcp.density) {
-  g_move_ctor_calls++;
-  track_instance_birth();
-  dpcp_trace_log("move ctor src=" + std::to_string(dpcp.get_instance_id()) +
-                 " dst=" + std::to_string(instanceId));
-}
-
 DPCPInst::~DPCPInst() {
   g_dtor_calls++;
   --g_live_instances;
