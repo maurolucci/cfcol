@@ -210,7 +210,7 @@ bool first_step(const DPCPInst& dpcp, VertexVector& selected,
                 std::map<size_t, std::set<size_t>>& adj, const Params& params,
                 Heur2SVertexSelector vertexSelector) {
   // Print the candidates and their values
-  dtd::cout << "Vertices: " << std::endl;
+  std::cout << "Vertices: " << std::endl;
   for (Vertex v : boost::make_iterator_range(vertices(dpcp.get_graph())))
     std::cout << v << std::endl;
 
