@@ -64,14 +64,15 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
       posVars() {
   const Vertex null_v = boost::graph_traits<Graph>::null_vertex();
   const DPCPInst& otherDpcp = other.get_dpcp_inst();
-  Vertex v = otherDpcp.get_branching_vertex();
+  Vertex v = other.get_branching_vertex();
+  Graph& graph = dpcp.get_graph();
   assert(v != null_v);
 
   // Map from original vertices to new vertices
   // Necessary to translate the columns of the pool
   std::map<Vertex, Vertex> vmap;
   for (auto [v, v_id] : otherDpcp.get_vertex2CurrentId()) {
-    Vertex uLeft = vertex(v_id, dpcp.graph);
+    Vertex uLeft = vertex(v_id, graph);
     assert(uLeft != null_v);
     vmap.emplace(v, uLeft);
   }
@@ -84,10 +85,9 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
     dpcp.preselect_vertex(it->second);
     if (params.preprocessing) dpcp.preprocess();
     if (params.is_verbose(2)) {
-      debugLog << "Left child after preprocessing: |V|="
-               << num_vertices(dpcp.graph) << ", |E|=" << num_edges(dpcp.graph)
-               << ", |P|=" << dpcp.get_nP() << ", |Q|=" << dpcp.get_nQ()
-               << std::endl;
+      debugLog << "Left child after preprocessing: |V|=" << num_vertices(graph)
+               << ", |E|=" << num_edges(graph) << ", |P|=" << dpcp.get_nP()
+               << ", |Q|=" << dpcp.get_nQ() << std::endl;
     }
 
   } else if (branchNode == BRANCH_NODE_RIGHT) {
