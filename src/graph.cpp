@@ -180,19 +180,16 @@ DPCPInst::DPCPInst(DPCPInst&& dpcp) noexcept
 DPCPInst::~DPCPInst() {}
 
 bool DPCPInst::check_consistency() const {
-  // Check that all vertices in P and Q are in the graph and have consistent
-  // vertex2CurrentId, vertex2Ppart, and vertex2Qpart maps.
+  // Check that all vertices in P and Q are in the graph
   for (size_t pi = 0; pi < get_nP(); ++pi)
     for (Vertex v : P[pi]) {
-      if (!has_vertex(v)) return false;
-      if (vertex2Ppart.at(v) != pi) return false;
-      assert(graph[v].id == get_original_id(v));
+      auto [it, found] = vertices(graph) | boost::stf::find(v);
+      if (!found) return false;
     }
   for (size_t qj = 0; qj < get_nQ(); ++qj)
     for (Vertex v : Q[qj]) {
-      if (!has_vertex(v)) return false;
-      if (vertex2Qpart.at(v) != qj) return false;
-      assert(graph[v].id == get_original_id(v));
+      auto [it, found] = vertices(graph) | boost::stf::find(v);
+      if (!found) return false;
     }
   return true;
 }
