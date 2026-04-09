@@ -114,6 +114,7 @@ class LP {
   size_t currentNodeDepth;
   size_t currentCgIter;
   double currentCgObj;
+  std::chrono::high_resolution_clock::time_point solveStartTime;
 
   struct PricingSummary {
     size_t callsPool = 0;

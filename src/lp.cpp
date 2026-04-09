@@ -50,7 +50,8 @@ LP::LP(const DPCPInst& origDpcp, Params& params, Stats& stats,
       currentNodeId(0),
       currentNodeDepth(0),
       currentCgIter(0),
-      currentCgObj(-1.0) {}
+      currentCgObj(-1.0),
+      solveStartTime() {}
 
 // Copy constructor used for creating child LPs during branching. It copies the
 // DPCP instance, but initializes an empty pool and lateColumns, and shares
@@ -75,7 +76,8 @@ LP::LP(const LP& other, BRANCH_NODE branchNode)
       currentNodeId(0),
       currentNodeDepth(0),
       currentCgIter(0),
-      currentCgObj(-1.0) {
+      currentCgObj(-1.0),
+      solveStartTime() {
   const Vertex null_v = boost::graph_traits<Graph>::null_vertex();
   const DPCPInst& otherDpcp = other.get_dpcp_inst();
   Vertex v = other.get_branching_vertex();
@@ -174,6 +176,7 @@ Column LP::translate_column(const Column& col,
 
 LP_STATE LP::solve(double timelimit, double ub) {
   auto startTime = std::chrono::high_resolution_clock::now();
+  solveStartTime = startTime;
   log_node_header();
 
   // Cleaning
@@ -923,12 +926,13 @@ void LP::log_node_header() const {
 }
 
 void LP::log_column(const Column& stab, const char* method) const {
-  const auto now = std::chrono::system_clock::now();
-  const double timestampSeconds =
-      std::chrono::duration<double>(now.time_since_epoch()).count();
+  const double elapsedSeconds =
+      std::chrono::duration<double>(std::chrono::high_resolution_clock::now() -
+                                    solveStartTime)
+          .count();
   const double reducedCost = 1.0 - stab.cost;
 
-  colLog << "col ts=" << timestampSeconds
+  colLog << "col time=" << elapsedSeconds
       << " method=" << method << " iter=" << currentCgIter
       << " obj=" << currentCgObj << " rc=" << reducedCost
       << " stable=[";
