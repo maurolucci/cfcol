@@ -295,6 +295,7 @@ int main(int argc, const char** argv) {
               : Output();
       std::ostream& lowLog = params.is_verbose(1) ? out.logFile : nullstream;
       std::ostream& debugLog = params.is_verbose(2) ? out.debugFile : lowLog;
+      std::ostream& colLog = params.is_verbose(2) ? out.colFile : nullstream;
 
       // Print params
       if (params.is_verbose()) {
@@ -339,8 +340,7 @@ int main(int argc, const char** argv) {
         if (params.is_verbose())
           lowLog << "Solving instance " << path << " with B&P" << std::endl;
         DPCPInst dpcp(graph, P, Q);
-        BP bp(params, lowLog, debugLog, out.colFile, col,
-              vm["ub"].as<double>());
+        BP bp(params, lowLog, debugLog, colLog, col, vm["ub"].as<double>());
         stats = bp.solve(dpcp);
       } else if (solver == "compact") {
         if (params.is_verbose())

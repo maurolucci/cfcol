@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cfloat>
 #include <chrono>
-#include <cstdint>
 #include <limits>
 #include <list>
 #include <numeric>
@@ -925,13 +924,11 @@ void LP::log_node_header() const {
 
 void LP::log_column(const Column& stab, const char* method) const {
   const auto now = std::chrono::system_clock::now();
-  const auto timestampMs =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          now.time_since_epoch())
-          .count();
+  const double timestampSeconds =
+      std::chrono::duration<double>(now.time_since_epoch()).count();
   const double reducedCost = 1.0 - stab.cost;
 
-  colLog << "col ts=" << static_cast<std::int64_t>(timestampMs)
+  colLog << "col ts=" << timestampSeconds
       << " method=" << method << " iter=" << currentCgIter
       << " obj=" << currentCgObj << " rc=" << reducedCost
       << " stable=[";
