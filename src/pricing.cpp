@@ -437,36 +437,37 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(
   switch (cplex.getCplexStatus()) {
     case IloCplex::CplexStatus::OptimalTol:
     case IloCplex::CplexStatus::Optimal:
+      // The optimal value is <= THRESHOLD = 1.1
       if (cplex.getObjValue() <= 1 + PRICING_EPSILON) {
         state = PRICING_STABLE_NOT_EXIST;
-        break;
-      } else
+      } else {
         state = PRICING_STABLE_FOUND;
-      std::cout << "Exact pricing: optimal solution found with objective value "
-                << cplex.getObjValue() << std::endl;
-      // The optimal value is <= THRESHOLD = 1.1
-      // Recover optimal solution
-      IloNumArray valY(cxenv, num_vertices(dpcp.get_graph()));
-      cplex.getValues(y, valY);
-      IloNumArray valW(cxenv, dpcp.get_nQ());
-      cplex.getValues(w, valW);
-      for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj) {
-        if (valW[qj] < 0.5) continue;
-        // Postprocessing: force w_j <= \sum_{v in Q[j]} y_v
-        size_t sum_y = 0;
-        for (auto v : dpcp.get_Q()[qj])
-          if (valY[dpcp.get_current_id(v)] > 0.5) sum_y += 1;
-        if (sum_y == 0)
-          valW[qj] = 0.0;
-        else
-          stab.qs.insert(qj);
-      }
-      for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
-        if (valY[dpcp.get_current_id(v)] > 0.5) {
-          stab.stable.push_back(v);
-          stab.ps.insert(dpcp.get_P_part(v));
+        std::cout
+            << "Exact pricing: optimal solution found with objective value "
+            << cplex.getObjValue() << std::endl;
+        // Recover optimal solution
+        IloNumArray valY(cxenv, num_vertices(dpcp.get_graph()));
+        cplex.getValues(y, valY);
+        IloNumArray valW(cxenv, dpcp.get_nQ());
+        cplex.getValues(w, valW);
+        for (size_t qj = 0; qj < dpcp.get_nQ(); ++qj) {
+          if (valW[qj] < 0.5) continue;
+          // Postprocessing: force w_j <= \sum_{v in Q[j]} y_v
+          size_t sum_y = 0;
+          for (auto v : dpcp.get_Q()[qj])
+            if (valY[dpcp.get_current_id(v)] > 0.5) sum_y += 1;
+          if (sum_y == 0)
+            valW[qj] = 0.0;
+          else
+            stab.qs.insert(qj);
         }
-      stab.cost = cplex.getBestObjValue();
+        for (auto v : boost::make_iterator_range(vertices(dpcp.get_graph())))
+          if (valY[dpcp.get_current_id(v)] > 0.5) {
+            stab.stable.push_back(v);
+            stab.ps.insert(dpcp.get_P_part(v));
+          }
+        stab.cost = cplex.getBestObjValue();
+      }
       break;
     case IloCplex::CplexStatus::AbortUser:
       // Exit with abortion means that the current value is > THRESHOLD = 1.1
