@@ -763,9 +763,11 @@ int LP::pricing_pool(CplexEnv& cenv, IloNumArray& dualsP, IloNumArray& dualsQ) {
   for (size_t i = 0; i < pool.size(); ++i) {
     pricingSummary.callsPool++;
     double cost = 0.0;
-    for (auto pi : pool[i].ps) cost += dualsP[pi];
-    for (auto qj : pool[i].qs) cost -= dualsQ[qj];
+    StableEnv& stab = pool[i];
+    for (auto pi : stab.ps) cost += dualsP[pi];
+    for (auto qj : stab.qs) cost -= dualsQ[qj];
     if (cost <= 1 + EPSILON) continue;
+    stab.cost = cost;
     if (heap.size() < k)
       heap.push({cost, i});
     else if (cost > heap.top().first) {
