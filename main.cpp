@@ -55,10 +55,10 @@ class Output {
 
   Output(std::string logPath, std::string debugPath, std::string colPath,
          std::string iterPath)
-      : logFileAux(logPath, std::ofstream::app),
-        debugFileAux(debugPath, std::ofstream::app),
-        colFileAux(colPath, std::ofstream::app),
-        iterFileAux(iterPath, std::ofstream::app),
+      : logFileAux(logPath, std::ofstream::out | std::ofstream::trunc),
+        debugFileAux(debugPath, std::ofstream::out | std::ofstream::trunc),
+        colFileAux(colPath, std::ofstream::out | std::ofstream::trunc),
+        iterFileAux(iterPath, std::ofstream::out | std::ofstream::trunc),
         logFile(this->logFileAux),
         debugFile(this->debugFileAux),
         colFile(this->colFileAux),
@@ -319,7 +319,8 @@ int main(int argc, const char** argv) {
 
         // Write stats
         if (vm.count("out")) {
-          std::ofstream statFile(outDirs["stat"].string(), std::ofstream::app);
+          std::ofstream statFile(outDirs["stat"].string(),
+                                 std::ofstream::out | std::ofstream::trunc);
           stats.write_stats(statFile);
           stats.print_stats(out.logFile);
         } else
@@ -329,7 +330,8 @@ int main(int argc, const char** argv) {
 
         // Write coloring
         if (stats.state == OPTIMAL || stats.state == FEASIBLE) {
-          std::ofstream solFile(outDirs["sol"].string(), std::ofstream::app);
+          std::ofstream solFile(outDirs["sol"].string(),
+                                std::ofstream::out | std::ofstream::trunc);
           col.write_coloring(solFile);
         }
       };
