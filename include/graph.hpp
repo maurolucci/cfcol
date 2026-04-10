@@ -136,6 +136,12 @@ struct StableEnv {
             double cost);
   StableEnv(VertexVector&& stable, std::set<size_t>&& ps, std::set<size_t>&& qs,
             double cost);
+  void clear() {
+    stable.clear();
+    ps.clear();
+    qs.clear();
+    cost = 0.0;
+  }
 
   bool check(const Graph& graph);
   void add_vertex(const Vertex v, size_t pi, size_t qj);

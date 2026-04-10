@@ -12,6 +12,7 @@ void ThresholdCallback::check_threshold(
   if (context.isCandidatePoint())
     if (context.getCandidateObjective() > THRESHOLD) {
       // Save stable set
+      stab.clear();
       IloNumArray valY(context.getEnv(), num_vertices(dpcp.get_graph()));
       context.getCandidatePoint(y, valY);
       IloNumArray valWb(context.getEnv(), dpcp.get_nQ());
@@ -446,6 +447,7 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::exact_solve(
             << "Exact pricing: optimal solution found with objective value "
             << cplex.getObjValue() << std::endl;
         // Recover optimal solution
+        stab.clear();
         IloNumArray valY(cxenv, num_vertices(dpcp.get_graph()));
         cplex.getValues(y, valY);
         IloNumArray valW(cxenv, dpcp.get_nQ());
@@ -508,10 +510,7 @@ std::pair<StableEnv, PRICING_STATE> PricingEnv::heur_solve(IloNumArray& dualsP,
                                                            IloNumArray& dualsQ,
                                                            double alpha) {
   // Reset stable
-  stab.stable.clear();
-  stab.ps.clear();
-  stab.qs.clear();
-  stab.cost = 0.0;
+  stab.clear();
 
   // Candidates
   std::list<std::pair<double, Vertex>> candidates;
